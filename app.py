@@ -1,4 +1,3 @@
-
 import os
 import requests
 from flask import Flask, request
@@ -6,7 +5,6 @@ from flask import Flask, request
 app = Flask(__name__)
 
 VERIFY_TOKEN = "ecomundo2026"
-
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 
@@ -29,14 +27,14 @@ def verify():
 
 
 def enviar_whatsapp(telefono, mensaje):
-    url = f"https://graph.facebook.com/v25.0/{PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
 
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
     }
 
-    data = {
+    payload = {
         "messaging_product": "whatsapp",
         "to": telefono,
         "type": "text",
@@ -45,7 +43,9 @@ def enviar_whatsapp(telefono, mensaje):
         }
     }
 
-    response = requests.post(url, headers=headers, json=data)
+    response = requests.post(url, headers=headers, json=payload)
+
+    print("RESPUESTA WHATSAPP:")
     print(response.status_code)
     print(response.text)
 
@@ -53,6 +53,7 @@ def enviar_whatsapp(telefono, mensaje):
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
+
     print("MENSAJE RECIBIDO:")
     print(data)
 
@@ -64,6 +65,9 @@ def webhook():
 
         mensaje = value["messages"][0]["text"]["body"].strip().lower()
         telefono = value["messages"][0]["from"]
+
+        print("TELÉFONO:", telefono)
+        print("MENSAJE:", mensaje)
 
         if mensaje in ["hola", "buenas", "info", "informacion", "información"]:
             respuesta = (
@@ -104,7 +108,7 @@ def webhook():
         enviar_whatsapp(telefono, respuesta)
 
     except Exception as e:
-        print("ERROR:")
+        print("ERROR EN WEBHOOK:")
         print(e)
 
     return "OK", 200

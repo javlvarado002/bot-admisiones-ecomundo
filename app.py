@@ -1,12 +1,46 @@
 import os
+import json
 import requests
+import gspread
+from datetime import datetime
 from flask import Flask, request
+from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
-VERIFY_TOKEN = "ecomundo2026"
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "ecomundo2026")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+GOOGLE_CREDENTIALS = os.environ.get("GOOGLE_CREDENTIALS")
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+
+def conectar_sheet():
+    cred_dict = json.loads(GOOGLE_CREDENTIALS)
+    credentials = Credentials.from_service_account_info(
+        cred_dict,
+        scopes=SCOPES
+    )
+    gc = gspread.authorize(credentials)
+    return gc.open("Admisiones Ecomundo").sheet1
+
+
+def guardar_en_sheets(telefono, nombre_representante, nombre_estudiante, edad, nivel, correo):
+    sheet = conectar_sheet()
+    sheet.append_row([
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        telefono,
+        nombre_representante,
+        nombre_estudiante,
+        edad,
+        nivel,
+        correo,
+        "Nuevo"
+    ])
 
 
 @app.route("/")
@@ -38,9 +72,7 @@ def enviar_whatsapp(telefono, mensaje):
         "messaging_product": "whatsapp",
         "to": telefono,
         "type": "text",
-        "text": {
-            "body": mensaje
-        }
+        "text": {"body": mensaje}
     }
 
     response = requests.post(url, headers=headers, json=payload)
@@ -63,11 +95,12 @@ def webhook():
         if "messages" not in value:
             return "OK", 200
 
-        mensaje = value["messages"][0]["text"]["body"].strip().lower()
+        mensaje_original = value["messages"][0]["text"]["body"].strip()
+        mensaje = mensaje_original.lower()
         telefono = value["messages"][0]["from"]
 
         print("TELÉFONO:", telefono)
-        print("MENSAJE:", mensaje)
+        print("MENSAJE:", mensaje_original)
 
         if mensaje in ["hola", "buenas", "info", "informacion", "información"]:
             respuesta = (
@@ -99,10 +132,33 @@ def webhook():
                 "No podremos recopilar ni procesar información personal sin su consentimiento."
             )
 
+        elif "nombre representante" in mensaje and "nombre estudiante" in mensaje:
+            lineas = mensaje_original.split("\n")
+            datos = {}
+
+            for linea in lineas:
+                if ":" in linea:
+                    clave, valor = linea.split(":", 1)
+                    datos[clave.strip().lower()] = valor.strip()
+
+            guardar_en_sheets(
+                telefono,
+                datos.get("nombre representante", ""),
+                datos.get("nombre estudiante", ""),
+                datos.get("edad estudiante", ""),
+                datos.get("grado/nivel", ""),
+                datos.get("correo", "")
+            )
+
+            respuesta = (
+                "✅ Información registrada correctamente.\n\n"
+                "Un asesor de admisiones se comunicará con usted en breve."
+            )
+
         else:
             respuesta = (
                 "Gracias. Hemos recibido su mensaje.\n\n"
-                "Un asesor de admisiones revisará la información y se comunicará con usted."
+                "Para iniciar el proceso de admisiones, escriba: Hola"
             )
 
         enviar_whatsapp(telefono, respuesta)

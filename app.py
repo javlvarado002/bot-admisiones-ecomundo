@@ -18,6 +18,25 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+NIVELES = {
+    "1": "Maternal",
+    "2": "Inicial 2 - 3 años",
+    "3": "Inicial 2 - 4 años",
+    "4": "Primer grado de Educación General Preparatoria",
+    "5": "Segundo grado de Educación General Básica",
+    "6": "Tercer grado de Educación General Básica",
+    "7": "Cuarto grado de Educación General Básica",
+    "8": "Quinto grado de Educación General Básica",
+    "9": "Sexto grado de Educación General Básica",
+    "10": "Séptimo grado de Educación General Básica",
+    "11": "Octavo grado de Educación General Básica",
+    "12": "Noveno grado de Educación General Básica",
+    "13": "Décimo grado de Educación General Básica",
+    "14": "Primer año de Bachillerato",
+    "15": "Segundo año de Bachillerato",
+    "16": "Tercer año de Bachillerato"
+}
+
 
 def conectar_sheet():
     cred_dict = json.loads(GOOGLE_CREDENTIALS)
@@ -91,33 +110,36 @@ def enviar_whatsapp(telefono, mensaje):
     print(response.text)
 
 
-def extraer_datos_con_etiquetas(mensaje):
-    datos = {}
+def menu_niveles():
+    texto = "🎓 Para continuar, seleccione el nivel de interés:\n\n"
+    for numero, nivel in NIVELES.items():
+        texto += f"{numero}. {nivel}\n"
+    texto += "\nResponda solo con el número del nivel."
+    return texto
 
-    for linea in mensaje.split("\n"):
-        if ":" in linea:
-            clave, valor = linea.split(":", 1)
-            datos[clave.strip().lower()] = valor.strip()
 
-    return {
-        "representante": datos.get("nombre representante", ""),
-        "estudiante": datos.get("nombre estudiante", ""),
-        "edad": datos.get("edad estudiante", ""),
-        "nivel": datos.get("grado/nivel", ""),
-        "correo": datos.get("correo", "")
-    }
+def detectar_nivel(mensaje):
+    mensaje = mensaje.strip().lower()
+
+    if mensaje in NIVELES:
+        return NIVELES[mensaje]
+
+    for nivel in NIVELES.values():
+        if mensaje in nivel.lower():
+            return nivel
+
+    return None
 
 
 def extraer_datos_sin_etiquetas(mensaje):
     lineas = [linea.strip() for linea in mensaje.split("\n") if linea.strip()]
 
-    if len(lineas) >= 5:
+    if len(lineas) >= 4:
         return {
             "representante": lineas[0],
             "estudiante": lineas[1],
             "edad": lineas[2],
-            "nivel": lineas[3],
-            "correo": lineas[4]
+            "correo": lineas[3]
         }
 
     return None
@@ -145,59 +167,82 @@ def webhook():
 
         if mensaje in ["hola", "buenas", "info", "informacion", "información"]:
             respuesta = (
-                "👋 Bienvenido/a a Admisiones Ecomundo.\n\n"
-                "Antes de continuar, le informamos que los datos personales proporcionados "
-                "serán tratados con la finalidad de gestionar solicitudes de admisión, "
+                "👋 ¡Hola! Bienvenido/a a *Ecomundo Educación Particular Bilingüe*.\n\n"
+                "Para poder atender su requerimiento por este canal, necesitamos que lea y acepte "
+                "el tratamiento de sus datos personales para gestionar solicitudes de admisión, "
                 "brindar información institucional y realizar seguimiento al proceso.\n\n"
-                "De conformidad con la LOPDP, escriba una opción:\n\n"
-                "1️⃣ ACEPTO\n"
-                "2️⃣ NO ACEPTO"
+                "¿Nos confirma su aceptación?\n\n"
+                "1️⃣ Sí, acepto\n"
+                "2️⃣ No acepto"
             )
 
-        elif mensaje in ["acepto", "1", "1️⃣"]:
+        elif mensaje in ["1", "si", "sí", "acepto", "1️⃣"]:
             respuesta = (
-                "Gracias por aceptar.\n\n"
-                "Por favor envíenos los siguientes datos en un solo mensaje, uno debajo del otro:\n\n"
-                "Nombre del representante\n"
-                "Nombre del estudiante\n"
-                "Edad del estudiante\n"
-                "Grado o nivel de interés\n"
-                "Correo electrónico\n\n"
-                "Ejemplo:\n"
-                "María Pérez\n"
-                "Juan Pérez\n"
-                "10\n"
-                "5to EGB\n"
-                "correo@ejemplo.com"
+                "✅ Gracias por confirmar.\n\n"
+                "Para continuar con el proceso de admisión, por favor seleccione una opción:"
+                "\n\n1. Quiero información de admisiones"
+                "\n2. Ya soy representante"
+                "\n3. Salir"
             )
 
-        elif mensaje in ["no acepto", "2", "2️⃣"]:
+        elif mensaje in ["2", "no", "no acepto", "2️⃣"]:
             respuesta = (
                 "Gracias por contactarnos.\n\n"
                 "No podremos recopilar ni procesar información personal sin su consentimiento."
             )
 
-        else:
-            datos = None
+        elif mensaje in ["1.", "quiero información", "quiero informacion", "admisiones"]:
+            respuesta = menu_niveles()
 
-            if "nombre representante" in mensaje and "nombre estudiante" in mensaje:
-                datos = extraer_datos_con_etiquetas(mensaje_original)
-            else:
-                datos = extraer_datos_sin_etiquetas(mensaje_original)
+        elif mensaje in ["2.", "ya soy representante"]:
+            respuesta = (
+                "Gracias por escribirnos.\n\n"
+                "Para consultas de representantes, por favor comuníquese con el área correspondiente "
+                "o indique brevemente su requerimiento."
+            )
 
-            if datos:
+        elif mensaje in ["3", "3.", "salir"]:
+            respuesta = "Gracias por contactarse con Ecomundo. Estamos atentos para apoyarle."
+
+        elif detectar_nivel(mensaje):
+            nivel = detectar_nivel(mensaje)
+            respuesta = (
+                f"Excelente elección. 🎓\n\n"
+                f"Ha seleccionado: *{nivel}*.\n\n"
+                "Para continuar con el proceso de admisión, por favor envíe los siguientes datos "
+                "en un solo mensaje, uno debajo del otro:\n\n"
+                "Nombre del representante\n"
+                "Nombre del estudiante\n"
+                "Edad del estudiante\n"
+                "Correo electrónico\n\n"
+                "Ejemplo:\n"
+                "María Pérez\n"
+                "Juan Pérez\n"
+                "10\n"
+                "correo@ejemplo.com\n\n"
+                f"Nivel seleccionado: {nivel}"
+            )
+
+        elif "nivel seleccionado:" in mensaje:
+            partes = mensaje_original.split("Nivel seleccionado:")
+            datos_texto = partes[0].strip()
+            nivel = partes[1].strip() if len(partes) > 1 else ""
+
+            datos = extraer_datos_sin_etiquetas(datos_texto)
+
+            if datos and nivel:
                 codigo = guardar_en_sheets(
                     telefono,
                     datos["representante"],
                     datos["estudiante"],
                     datos["edad"],
-                    datos["nivel"],
+                    nivel,
                     datos["correo"]
                 )
 
                 respuesta = (
                     "✅ Información registrada correctamente.\n\n"
-                    f"Su código de caso es: {codigo}\n\n"
+                    f"Su código de caso es: *{codigo}*.\n\n"
                     "Un asesor de admisiones se comunicará con usted en breve."
                 )
             else:
@@ -207,9 +252,14 @@ def webhook():
                     "Nombre del representante\n"
                     "Nombre del estudiante\n"
                     "Edad del estudiante\n"
-                    "Grado o nivel de interés\n"
-                    "Correo electrónico"
+                    "Correo electrónico\n"
+                    "Nivel seleccionado: nivel"
                 )
+
+        else:
+            respuesta = (
+                "Para iniciar el proceso de admisiones, escriba: *Hola*"
+            )
 
         enviar_whatsapp(telefono, respuesta)
 

@@ -167,7 +167,7 @@ def webhook():
 
         if mensaje in ["hola", "buenas", "info", "informacion", "información"]:
             respuesta = (
-                "👋 ¡Hola! Bienvenido/a a *Ecomundo Educación Particular Bilingüe*.\n\n"
+                "👋 ¡Hola! Bienvenido/a a *Unidad Educación Particular Bilingüe Ecomundo*.\n\n"
                 "Para poder atender su requerimiento por este canal, necesitamos que lea y acepte "
                 "el tratamiento de sus datos personales para gestionar solicitudes de admisión, "
                 "brindar información institucional y realizar seguimiento al proceso.\n\n"

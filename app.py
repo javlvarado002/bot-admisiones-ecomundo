@@ -21,26 +21,35 @@ SCOPES = [
 
 def conectar_sheet():
     cred_dict = json.loads(GOOGLE_CREDENTIALS)
-    credentials = Credentials.from_service_account_info(
-        cred_dict,
-        scopes=SCOPES
-    )
+    credentials = Credentials.from_service_account_info(cred_dict, scopes=SCOPES)
     gc = gspread.authorize(credentials)
     return gc.open("Admisiones Ecomundo").sheet1
 
 
-def guardar_en_sheets(telefono, nombre_representante, nombre_estudiante, edad, nivel, correo):
+def generar_codigo_caso():
     sheet = conectar_sheet()
+    total_filas = len(sheet.get_all_values())
+    numero = total_filas - 1
+    return f"ADM-2026-{numero:04d}"
+
+
+def guardar_en_sheets(telefono, representante, estudiante, edad, nivel, correo):
+    sheet = conectar_sheet()
+    codigo = generar_codigo_caso()
+
     sheet.append_row([
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         telefono,
-        nombre_representante,
-        nombre_estudiante,
+        representante,
+        estudiante,
         edad,
         nivel,
         correo,
-        "Nuevo"
+        "Nuevo",
+        codigo
     ])
+
+    return codigo
 
 
 @app.route("/")
@@ -82,6 +91,38 @@ def enviar_whatsapp(telefono, mensaje):
     print(response.text)
 
 
+def extraer_datos_con_etiquetas(mensaje):
+    datos = {}
+
+    for linea in mensaje.split("\n"):
+        if ":" in linea:
+            clave, valor = linea.split(":", 1)
+            datos[clave.strip().lower()] = valor.strip()
+
+    return {
+        "representante": datos.get("nombre representante", ""),
+        "estudiante": datos.get("nombre estudiante", ""),
+        "edad": datos.get("edad estudiante", ""),
+        "nivel": datos.get("grado/nivel", ""),
+        "correo": datos.get("correo", "")
+    }
+
+
+def extraer_datos_sin_etiquetas(mensaje):
+    lineas = [linea.strip() for linea in mensaje.split("\n") if linea.strip()]
+
+    if len(lineas) >= 5:
+        return {
+            "representante": lineas[0],
+            "estudiante": lineas[1],
+            "edad": lineas[2],
+            "nivel": lineas[3],
+            "correo": lineas[4]
+        }
+
+    return None
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -108,58 +149,67 @@ def webhook():
                 "Antes de continuar, le informamos que los datos personales proporcionados "
                 "serán tratados con la finalidad de gestionar solicitudes de admisión, "
                 "brindar información institucional y realizar seguimiento al proceso.\n\n"
-                "De conformidad con la LOPDP, escriba:\n\n"
-                "✅ ACEPTO\n"
-                "para continuar.\n\n"
-                "❌ NO ACEPTO\n"
-                "para finalizar."
+                "De conformidad con la LOPDP, escriba una opción:\n\n"
+                "1️⃣ ACEPTO\n"
+                "2️⃣ NO ACEPTO"
             )
 
-        elif mensaje == "acepto":
+        elif mensaje in ["acepto", "1", "1️⃣"]:
             respuesta = (
                 "Gracias por aceptar.\n\n"
-                "Por favor envíenos los siguientes datos en un solo mensaje:\n\n"
-                "Nombre representante:\n"
-                "Nombre estudiante:\n"
-                "Edad estudiante:\n"
-                "Grado/Nivel:\n"
-                "Correo:"
+                "Por favor envíenos los siguientes datos en un solo mensaje, uno debajo del otro:\n\n"
+                "Nombre del representante\n"
+                "Nombre del estudiante\n"
+                "Edad del estudiante\n"
+                "Grado o nivel de interés\n"
+                "Correo electrónico\n\n"
+                "Ejemplo:\n"
+                "María Pérez\n"
+                "Juan Pérez\n"
+                "10\n"
+                "5to EGB\n"
+                "correo@ejemplo.com"
             )
 
-        elif mensaje == "no acepto":
+        elif mensaje in ["no acepto", "2", "2️⃣"]:
             respuesta = (
                 "Gracias por contactarnos.\n\n"
                 "No podremos recopilar ni procesar información personal sin su consentimiento."
             )
 
-        elif "nombre representante" in mensaje and "nombre estudiante" in mensaje:
-            lineas = mensaje_original.split("\n")
-            datos = {}
-
-            for linea in lineas:
-                if ":" in linea:
-                    clave, valor = linea.split(":", 1)
-                    datos[clave.strip().lower()] = valor.strip()
-
-            guardar_en_sheets(
-                telefono,
-                datos.get("nombre representante", ""),
-                datos.get("nombre estudiante", ""),
-                datos.get("edad estudiante", ""),
-                datos.get("grado/nivel", ""),
-                datos.get("correo", "")
-            )
-
-            respuesta = (
-                "✅ Información registrada correctamente.\n\n"
-                "Un asesor de admisiones se comunicará con usted en breve."
-            )
-
         else:
-            respuesta = (
-                "Gracias. Hemos recibido su mensaje.\n\n"
-                "Para iniciar el proceso de admisiones, escriba: Hola"
-            )
+            datos = None
+
+            if "nombre representante" in mensaje and "nombre estudiante" in mensaje:
+                datos = extraer_datos_con_etiquetas(mensaje_original)
+            else:
+                datos = extraer_datos_sin_etiquetas(mensaje_original)
+
+            if datos:
+                codigo = guardar_en_sheets(
+                    telefono,
+                    datos["representante"],
+                    datos["estudiante"],
+                    datos["edad"],
+                    datos["nivel"],
+                    datos["correo"]
+                )
+
+                respuesta = (
+                    "✅ Información registrada correctamente.\n\n"
+                    f"Su código de caso es: {codigo}\n\n"
+                    "Un asesor de admisiones se comunicará con usted en breve."
+                )
+            else:
+                respuesta = (
+                    "No logramos registrar la información.\n\n"
+                    "Por favor envíe los datos en este orden:\n\n"
+                    "Nombre del representante\n"
+                    "Nombre del estudiante\n"
+                    "Edad del estudiante\n"
+                    "Grado o nivel de interés\n"
+                    "Correo electrónico"
+                )
 
         enviar_whatsapp(telefono, respuesta)
 

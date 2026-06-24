@@ -19,22 +19,22 @@ SCOPES = [
 ]
 
 NIVELES = {
-    "4": "Maternal",
-    "5": "Inicial 2 (3 años)",
-    "6": "Inicial 2 (4 años)",
-    "7": "Primer grado de Educación General Preparatoria",
-    "8": "Segundo grado de Educación General Básica",
-    "9": "Tercer grado de Educación General Básica",
-    "10": "Cuarto grado de Educación General Básica",
-    "11": "Quinto grado de Educación General Básica",
-    "12": "Sexto grado de Educación General Básica",
-    "13": "Séptimo grado de Educación General Básica",
-    "14": "Octavo grado de Educación General Básica",
-    "15": "Noveno grado de Educación General Básica",
-    "16": "Décimo grado de Educación General Básica",
-    "17": "Primer año de Bachillerato",
-    "18": "Segundo año de Bachillerato",
-    "19": "Tercer año de Bachillerato"
+    "1": "Maternal",
+    "2": "Inicial 2 (3 años)",
+    "3": "Inicial 2 (4 años)",
+    "4": "Primer grado de Educación General Preparatoria",
+    "5": "Segundo grado de Educación General Básica",
+    "6": "Tercer grado de Educación General Básica",
+    "7": "Cuarto grado de Educación General Básica",
+    "8": "Quinto grado de Educación General Básica",
+    "9": "Sexto grado de Educación General Básica",
+    "10": "Séptimo grado de Educación General Básica",
+    "11": "Octavo grado de Educación General Básica",
+    "12": "Noveno grado de Educación General Básica",
+    "13": "Décimo grado de Educación General Básica",
+    "14": "Primer año de Bachillerato",
+    "15": "Segundo año de Bachillerato",
+    "16": "Tercer año de Bachillerato"
 }
 
 
@@ -48,7 +48,7 @@ def conectar_sheet():
 def generar_codigo_caso():
     sheet = conectar_sheet()
     total_filas = len(sheet.get_all_values())
-    numero = total_filas - 1
+    numero = total_filas
     return f"ADM-2026-{numero:04d}"
 
 
@@ -108,27 +108,11 @@ def enviar_whatsapp(telefono, mensaje):
 
 
 def menu_niveles():
-    return (
-        "🎓 Excelente elección.\n\n"
-        "Seleccione el nivel de interés:\n\n"
-        "4. Maternal\n"
-        "5. Inicial 2 (3 años)\n"
-        "6. Inicial 2 (4 años)\n"
-        "7. Primer grado de Educación General Preparatoria\n"
-        "8. Segundo grado de Educación General Básica\n"
-        "9. Tercer grado de Educación General Básica\n"
-        "10. Cuarto grado de Educación General Básica\n"
-        "11. Quinto grado de Educación General Básica\n"
-        "12. Sexto grado de Educación General Básica\n"
-        "13. Séptimo grado de Educación General Básica\n"
-        "14. Octavo grado de Educación General Básica\n"
-        "15. Noveno grado de Educación General Básica\n"
-        "16. Décimo grado de Educación General Básica\n"
-        "17. Primer año de Bachillerato\n"
-        "18. Segundo año de Bachillerato\n"
-        "19. Tercer año de Bachillerato\n\n"
-        "Responda solo con el número del nivel."
-    )
+    texto = "🎓 Seleccione el nivel de interés:\n\n"
+    for numero, nivel in NIVELES.items():
+        texto += f"{numero}. {nivel}\n"
+    texto += "\nResponda únicamente con el número del nivel deseado."
+    return texto
 
 
 def extraer_datos(mensaje):
@@ -167,25 +151,31 @@ def webhook():
         if mensaje in ["hola", "inicio", "menu", "menú"]:
             respuesta = (
                 "👋 ¡Hola! Bienvenido/a a *Ecomundo Educación Particular Bilingüe*.\n\n"
-                "Para poder atender su requerimiento por este canal, necesitamos que lea y acepte "
-                "el tratamiento de sus datos personales para gestionar solicitudes de admisión, "
-                "brindar información institucional y realizar seguimiento al proceso.\n\n"
-                "¿Nos confirma su aceptación?\n\n"
-                "Escriba:\n"
-                "✅ ACEPTO\n"
-                "❌ NO ACEPTO"
+                "Nos alegra acompañarle en este proceso. Para brindarle una atención personalizada "
+                "y gestionar adecuadamente su solicitud, le invitamos a revisar nuestra Política de "
+                "Privacidad y Tratamiento de Datos Personales.\n\n"
+                "Sus datos serán utilizados exclusivamente para atender consultas, brindar información "
+                "institucional y realizar seguimiento al proceso de admisión, de conformidad con la "
+                "Ley Orgánica de Protección de Datos Personales (LOPDP).\n\n"
+                "¿Nos confirma su aceptación para continuar?\n\n"
+                "✅ A. Sí, acepto.\n\n"
+                "❌ B. No acepto.\n\n"
+                "Por favor, responda únicamente con la letra A o B."
             )
 
-        elif mensaje in ["acepto", "sí", "si"]:
+        elif mensaje in ["a", "a.", "acepto", "si", "sí"]:
             respuesta = (
                 "✅ Gracias por confirmar.\n\n"
-                "Para continuar, seleccione una opción:\n\n"
-                "1. Quiero información de admisiones\n"
-                "2. Ya soy representante\n"
-                "3. Salir"
+                "Es un gusto atenderle.\n\n"
+                "Por favor, seleccione una de las siguientes opciones:\n\n"
+                "1️⃣ Información de admisiones\n\n"
+                "2️⃣ Ya soy representante de Ecomundo\n\n"
+                "3️⃣ Contactar a un asesor de admisiones\n\n"
+                "4️⃣ Salir\n\n"
+                "Responda únicamente con el número de la opción deseada."
             )
 
-        elif mensaje in ["no acepto", "no"]:
+        elif mensaje in ["b", "b.", "no", "no acepto"]:
             respuesta = (
                 "Gracias por contactarnos.\n\n"
                 "No podremos recopilar ni procesar información personal sin su consentimiento."
@@ -198,17 +188,27 @@ def webhook():
             respuesta = (
                 "Gracias por escribirnos.\n\n"
                 "Este canal está orientado al proceso de admisiones. "
-                "Por favor indique brevemente su requerimiento para poder derivarlo al área correspondiente."
+                "Por favor indique brevemente su requerimiento para derivarlo al área correspondiente."
             )
 
         elif mensaje == "3":
-            respuesta = "Gracias por contactarse con Ecomundo. Estamos atentos para apoyarle."
+            respuesta = (
+                "Con gusto le ayudaremos.\n\n"
+                "Por favor envíe su nombre completo y un asesor de admisiones se comunicará con usted."
+            )
+
+        elif mensaje == "4":
+            respuesta = (
+                "Gracias por contactarse con Ecomundo Educación Particular Bilingüe.\n\n"
+                "Estamos atentos para apoyarle cuando lo necesite."
+            )
 
         elif mensaje in NIVELES:
             nivel = NIVELES[mensaje]
             respuesta = (
                 f"Ha seleccionado: *{nivel}*.\n\n"
-                "Para continuar con el proceso de admisión, envíe los siguientes datos en un solo mensaje, uno debajo del otro:\n\n"
+                "Para continuar con el proceso de admisión, envíe los siguientes datos "
+                "en un solo mensaje, uno debajo del otro:\n\n"
                 "Nombre del representante\n"
                 "Nombre del estudiante\n"
                 "Edad del estudiante\n"
@@ -238,7 +238,8 @@ def webhook():
                 respuesta = (
                     "✅ Información registrada correctamente.\n\n"
                     f"Su código de caso es: *{codigo}*.\n\n"
-                    "Un asesor de admisiones se comunicará con usted en breve."
+                    "Un asesor de admisiones se comunicará con usted en breve.\n\n"
+                    "Gracias por elegir Ecomundo."
                 )
             else:
                 respuesta = (

@@ -57,30 +57,34 @@ def obtener_asesor():
 
     asesores = hoja_asesores.get_all_records()
 
-    activos = [
-        a for a in asesores
-        if str(a.get("Activo", "")).strip().lower() == "si"
-    ]
+    activos = []
+
+    for index, asesor in enumerate(asesores, start=2):
+        activo = str(asesor.get("Activo", "")).strip().lower()
+
+        if activo == "si":
+            asignados = asesor.get("Asignados", 0)
+            if asignados == "":
+                asignados = 0
+
+            activos.append({
+                "fila": index,
+                "nombre": asesor.get("Nombres", "Asesor asignado"),
+                "asignados": int(asignados)
+            })
 
     if not activos:
         return "Sin asesor disponible"
 
-    for asesor in activos:
-        if asesor.get("Asignados", "") == "":
-            asesor["Asignados"] = 0
+    asesor_seleccionado = sorted(activos, key=lambda x: x["asignados"])[0]
 
-    activos = sorted(
-        activos,
-        key=lambda x: int(x.get("Asignados", 0))
+    hoja_asesores.update_cell(
+        asesor_seleccionado["fila"],
+        5,
+        asesor_seleccionado["asignados"] + 1
     )
 
-    asesor = activos[0]
-    fila = asesores.index(asesor) + 2
-    actual = int(asesor.get("Asignados", 0))
-
-    hoja_asesores.update_cell(fila, 5, actual + 1)
-
-    return asesor["Nombres y Apellidos"]
+    return asesor_seleccionado["nombre"]
 
 
 def generar_codigo_caso():
@@ -148,19 +152,12 @@ def enviar_botones_privacidad(telefono):
             },
             "action": {
                 "buttons": [
-                    {
-                        "type": "reply",
-                        "reply": {"id": "acepto_privacidad", "title": "✅ Sí"}
-                    },
-                    {
-                        "type": "reply",
-                        "reply": {"id": "no_acepto_privacidad", "title": "❌ No"}
-                    }
+                    {"type": "reply", "reply": {"id": "acepto_privacidad", "title": "✅ Sí"}},
+                    {"type": "reply", "reply": {"id": "no_acepto_privacidad", "title": "❌ No"}}
                 ]
             }
         }
     }
-
     enviar_payload(payload)
 
 
@@ -179,23 +176,13 @@ def enviar_menu_principal(telefono):
             },
             "action": {
                 "buttons": [
-                    {
-                        "type": "reply",
-                        "reply": {"id": "menu_admisiones", "title": "🎓 Admisiones"}
-                    },
-                    {
-                        "type": "reply",
-                        "reply": {"id": "menu_representante", "title": "👨‍👩‍👧 Representante"}
-                    },
-                    {
-                        "type": "reply",
-                        "reply": {"id": "menu_asesor", "title": "👩‍💼 Asesor"}
-                    }
+                    {"type": "reply", "reply": {"id": "menu_admisiones", "title": "🎓 Admisiones"}},
+                    {"type": "reply", "reply": {"id": "menu_representante", "title": "👨‍👩‍👧 Representante"}},
+                    {"type": "reply", "reply": {"id": "menu_asesor", "title": "👩‍💼 Asesor"}}
                 ]
             }
         }
     }
-
     enviar_payload(payload)
 
 
@@ -229,7 +216,31 @@ def enviar_lista_grupos_nivel(telefono):
             }
         }
     }
+    enviar_payload(payload)
 
+
+def enviar_lista_niveles(telefono, titulo, filas):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": telefono,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": f"Seleccione el nivel de interés en *{titulo}*:"},
+            "action": {
+                "button": "Seleccionar",
+                "sections": [
+                    {
+                        "title": titulo,
+                        "rows": [
+                            {"id": f"nivel_{id_nivel}", "title": nombre}
+                            for id_nivel, nombre in filas
+                        ]
+                    }
+                ]
+            }
+        }
+    }
     enviar_payload(payload)
 
 
@@ -262,32 +273,6 @@ def enviar_lista_bgu(telefono):
         ("bgu2", "Segundo BGU"),
         ("bgu3", "Tercero BGU")
     ])
-
-
-def enviar_lista_niveles(telefono, titulo, filas):
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": telefono,
-        "type": "interactive",
-        "interactive": {
-            "type": "list",
-            "body": {"text": f"Seleccione el nivel de interés en *{titulo}*:"},
-            "action": {
-                "button": "Seleccionar",
-                "sections": [
-                    {
-                        "title": titulo,
-                        "rows": [
-                            {"id": f"nivel_{id_nivel}", "title": nombre}
-                            for id_nivel, nombre in filas
-                        ]
-                    }
-                ]
-            }
-        }
-    }
-
-    enviar_payload(payload)
 
 
 def extraer_mensaje(value):

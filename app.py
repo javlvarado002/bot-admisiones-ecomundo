@@ -190,11 +190,14 @@ def webhook():
                 "Este canal está orientado al proceso de admisiones. "
                 "Por favor indique brevemente su requerimiento para derivarlo al área correspondiente."
             )
-
+        
         elif mensaje == "3":
             respuesta = (
-                "Con gusto le ayudaremos.\n\n"
-                "Por favor envíe su nombre completo y un asesor de admisiones se comunicará con usted."
+                "👩‍💼 Atención personalizada\n\n"
+                "Gracias por su interés en Ecomundo Educación Particular Bilingüe.\n\n"
+                "Puede comunicarse directamente con nuestro equipo de admisiones en el siguiente enlace:\n\n"
+                "📲 https://wa.me/593993083025?text=Hola,%20deseo%20información%20sobre%20admisiones%20de%20Ecomundo.\n\n"
+                "Nuestro equipo estará encantado de atenderle y acompañarle durante el proceso de admisión."
             )
 
         elif mensaje == "4":

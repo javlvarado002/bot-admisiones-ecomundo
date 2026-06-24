@@ -171,7 +171,7 @@ def enviar_lista_grupos_nivel(telefono):
             "body": {
                 "text": (
                     "🎓 ¡Excelente elección!\n\n"
-                    "Ser parte de Ecomundo Educación Particular Bilingüe permite acceder a una "
+                    "Ser parte de Unidad Educación Particular Bilingüe Ecomundo permite acceder a una "
                     "formación integral, bilingüe y orientada al desarrollo académico y personal.\n\n"
                     "Seleccione el grupo de nivel que desea consultar:"
                 )
@@ -363,7 +363,7 @@ def webhook():
                 telefono,
                 "👩‍💼 Atención personalizada\n\n"
                 "Para que uno de nuestros asesores pueda atenderle, por favor envíe en un solo mensaje:\n\n"
-                "Nombre completo\n"
+                "Nombres completos\n"
                 "Número de contacto\n"
                 "Nivel de interés\n\n"
                 "Ejemplo:\n"

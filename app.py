@@ -104,7 +104,7 @@ def enviar_botones_privacidad(telefono):
             "type": "button",
             "body": {
                 "text": (
-                    "👋 ¡Hola! Bienvenido/a a *Ecomundo Educación Particular Bilingüe*.\n\n"
+                    "👋 ¡Hola! Bienvenido/a a *Unidad Educación Particular Bilingüe Ecomundo*.\n\n"
                     "Para poder atender su requerimiento por este canal, necesitamos que lea y acepte "
                     "nuestra Política de Privacidad y Tratamiento de Datos Personales.\n\n"
                     "¿Nos confirma su aceptación para brindarle una atención personalizada?"

@@ -18,23 +18,25 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+USER_STATE = {}
+
 NIVELES = {
-    "1": "Maternal",
-    "2": "Inicial 2 (3 años)",
-    "3": "Inicial 2 (4 años)",
-    "4": "Primer grado de Educación General Preparatoria",
-    "5": "Segundo grado de Educación General Básica",
-    "6": "Tercer grado de Educación General Básica",
-    "7": "Cuarto grado de Educación General Básica",
-    "8": "Quinto grado de Educación General Básica",
-    "9": "Sexto grado de Educación General Básica",
-    "10": "Séptimo grado de Educación General Básica",
-    "11": "Octavo grado de Educación General Básica",
-    "12": "Noveno grado de Educación General Básica",
-    "13": "Décimo grado de Educación General Básica",
-    "14": "Primer año de Bachillerato",
-    "15": "Segundo año de Bachillerato",
-    "16": "Tercer año de Bachillerato"
+    "maternal": "Maternal",
+    "ini3": "Inicial 2 (3 años)",
+    "ini4": "Inicial 2 (4 años)",
+    "primero": "Primer grado de Educación General Preparatoria",
+    "segundo": "Segundo grado de Educación General Básica",
+    "tercero": "Tercer grado de Educación General Básica",
+    "cuarto": "Cuarto grado de Educación General Básica",
+    "quinto": "Quinto grado de Educación General Básica",
+    "sexto": "Sexto grado de Educación General Básica",
+    "septimo": "Séptimo grado de Educación General Básica",
+    "octavo": "Octavo grado de Educación General Básica",
+    "noveno": "Noveno grado de Educación General Básica",
+    "decimo": "Décimo grado de Educación General Básica",
+    "bgu1": "Primer año de Bachillerato",
+    "bgu2": "Segundo año de Bachillerato",
+    "bgu3": "Tercer año de Bachillerato"
 }
 
 
@@ -48,11 +50,10 @@ def conectar_sheet():
 def generar_codigo_caso():
     sheet = conectar_sheet()
     total_filas = len(sheet.get_all_values())
-    numero = total_filas
-    return f"ADM-2026-{numero:04d}"
+    return f"ADM-2026-{total_filas:04d}"
 
 
-def guardar_en_sheets(telefono, representante, estudiante, edad, nivel, correo):
+def guardar_en_sheets(telefono, representante, estudiante, edad, nivel, correo, estado, asesor=""):
     sheet = conectar_sheet()
     codigo = generar_codigo_caso()
 
@@ -64,11 +65,233 @@ def guardar_en_sheets(telefono, representante, estudiante, edad, nivel, correo):
         edad,
         nivel,
         correo,
-        "Nuevo",
+        estado,
+        asesor,
         codigo
     ])
 
     return codigo
+
+
+def enviar_payload(payload):
+    url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    print("RESPUESTA WHATSAPP:", response.status_code, response.text)
+
+
+def enviar_texto(telefono, mensaje):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": telefono,
+        "type": "text",
+        "text": {"body": mensaje}
+    }
+    enviar_payload(payload)
+
+
+def enviar_botones_privacidad(telefono):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": telefono,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": (
+                    "👋 ¡Hola! Bienvenido/a a *Ecomundo Educación Particular Bilingüe*.\n\n"
+                    "Para poder atender su requerimiento por este canal, necesitamos que lea y acepte "
+                    "nuestra Política de Privacidad y Tratamiento de Datos Personales.\n\n"
+                    "¿Nos confirma su aceptación para brindarle una atención personalizada?"
+                )
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {"id": "acepto_privacidad", "title": "✅ Sí"}
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {"id": "no_acepto_privacidad", "title": "❌ No"}
+                    }
+                ]
+            }
+        }
+    }
+    enviar_payload(payload)
+
+
+def enviar_menu_principal(telefono):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": telefono,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": (
+                    "✅ ¡Gracias por confirmar!\n\n"
+                    "Para continuar, por favor seleccione una de las siguientes opciones:"
+                )
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {"id": "menu_admisiones", "title": "🎓 Admisiones"}
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {"id": "menu_representante", "title": "👨‍👩‍👧 Representante"}
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {"id": "menu_asesor", "title": "👩‍💼 Asesor"}
+                    }
+                ]
+            }
+        }
+    }
+    enviar_payload(payload)
+
+
+def enviar_lista_grupos_nivel(telefono):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": telefono,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {
+                "text": (
+                    "🎓 ¡Excelente elección!\n\n"
+                    "Ser parte de Ecomundo Educación Particular Bilingüe permite acceder a una "
+                    "formación integral, bilingüe y orientada al desarrollo académico y personal.\n\n"
+                    "Seleccione el grupo de nivel que desea consultar:"
+                )
+            },
+            "action": {
+                "button": "Ver niveles",
+                "sections": [
+                    {
+                        "title": "Niveles disponibles",
+                        "rows": [
+                            {"id": "grupo_inicial", "title": "Maternal e Inicial"},
+                            {"id": "grupo_egb", "title": "Educación General Básica"},
+                            {"id": "grupo_bgu", "title": "Bachillerato"}
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+    enviar_payload(payload)
+
+
+def enviar_lista_inicial(telefono):
+    enviar_lista_niveles(telefono, "Maternal e Inicial", [
+        ("maternal", "Maternal"),
+        ("ini3", "Inicial 2 (3 años)"),
+        ("ini4", "Inicial 2 (4 años)")
+    ])
+
+
+def enviar_lista_egb(telefono):
+    enviar_lista_niveles(telefono, "Educación General Básica", [
+        ("primero", "Primero EGB"),
+        ("segundo", "Segundo EGB"),
+        ("tercero", "Tercero EGB"),
+        ("cuarto", "Cuarto EGB"),
+        ("quinto", "Quinto EGB"),
+        ("sexto", "Sexto EGB"),
+        ("septimo", "Séptimo EGB"),
+        ("octavo", "Octavo EGB"),
+        ("noveno", "Noveno EGB"),
+        ("decimo", "Décimo EGB")
+    ])
+
+
+def enviar_lista_bgu(telefono):
+    enviar_lista_niveles(telefono, "Bachillerato", [
+        ("bgu1", "Primero BGU"),
+        ("bgu2", "Segundo BGU"),
+        ("bgu3", "Tercero BGU")
+    ])
+
+
+def enviar_lista_niveles(telefono, titulo, filas):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": telefono,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": f"Seleccione el nivel de interés en *{titulo}*:"},
+            "action": {
+                "button": "Seleccionar",
+                "sections": [
+                    {
+                        "title": titulo,
+                        "rows": [
+                            {"id": f"nivel_{id_nivel}", "title": nombre}
+                            for id_nivel, nombre in filas
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+    enviar_payload(payload)
+
+
+def extraer_mensaje(value):
+    msg = value["messages"][0]
+
+    if msg["type"] == "text":
+        return msg["text"]["body"].strip(), "text"
+
+    if msg["type"] == "interactive":
+        interactive = msg["interactive"]
+
+        if interactive["type"] == "button_reply":
+            return interactive["button_reply"]["id"], "button"
+
+        if interactive["type"] == "list_reply":
+            return interactive["list_reply"]["id"], "list"
+
+    return "", "unknown"
+
+
+def extraer_datos_admision(mensaje):
+    lineas = [linea.strip() for linea in mensaje.split("\n") if linea.strip()]
+
+    if len(lineas) >= 4:
+        return {
+            "representante": lineas[0],
+            "estudiante": lineas[1],
+            "edad": lineas[2],
+            "correo": lineas[3]
+        }
+
+    return None
+
+
+def extraer_datos_asesor(mensaje):
+    lineas = [linea.strip() for linea in mensaje.split("\n") if linea.strip()]
+
+    if len(lineas) >= 3:
+        return {
+            "nombre": lineas[0],
+            "contacto": lineas[1],
+            "nivel": lineas[2]
+        }
+
+    return None
 
 
 @app.route("/")
@@ -88,48 +311,6 @@ def verify():
     return "Error de verificación", 403
 
 
-def enviar_whatsapp(telefono, mensaje):
-    url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
-
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": telefono,
-        "type": "text",
-        "text": {"body": mensaje}
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
-    print("RESPUESTA WHATSAPP:", response.status_code, response.text)
-
-
-def menu_niveles():
-    texto = "🎓 Seleccione el nivel de interés:\n\n"
-    for numero, nivel in NIVELES.items():
-        texto += f"{numero}. {nivel}\n"
-    texto += "\nResponda únicamente con el número del nivel deseado."
-    return texto
-
-
-def extraer_datos(mensaje):
-    lineas = [linea.strip() for linea in mensaje.split("\n") if linea.strip()]
-
-    if len(lineas) >= 5:
-        return {
-            "representante": lineas[0],
-            "estudiante": lineas[1],
-            "edad": lineas[2],
-            "nivel": lineas[3],
-            "correo": lineas[4]
-        }
-
-    return None
-
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -141,116 +322,167 @@ def webhook():
         if "messages" not in value:
             return "OK", 200
 
-        mensaje_original = value["messages"][0]["text"]["body"].strip()
-        mensaje = mensaje_original.lower()
         telefono = value["messages"][0]["from"]
+        mensaje_original, tipo = extraer_mensaje(value)
+        mensaje = mensaje_original.lower()
 
         print("TELÉFONO:", telefono)
         print("MENSAJE:", mensaje_original)
 
         if mensaje in ["hola", "inicio", "menu", "menú"]:
-            respuesta = (
-                "👋 ¡Hola! Bienvenido/a a *Ecomundo Educación Particular Bilingüe*.\n\n"
-                "Nos alegra acompañarle en este proceso. Para brindarle una atención personalizada "
-                "y gestionar adecuadamente su solicitud, le invitamos a revisar nuestra Política de "
-                "Privacidad y Tratamiento de Datos Personales.\n\n"
-                "Sus datos serán utilizados exclusivamente para atender consultas, brindar información "
-                "institucional y realizar seguimiento al proceso de admisión, de conformidad con la "
-                "Ley Orgánica de Protección de Datos Personales (LOPDP).\n\n"
-                "¿Nos confirma su aceptación para continuar?\n\n"
-                "✅ A. Sí, acepto.\n\n"
-                "❌ B. No acepto.\n\n"
-                "Por favor, responda únicamente con la letra A o B."
-            )
+            USER_STATE[telefono] = {"estado": "inicio"}
+            enviar_botones_privacidad(telefono)
 
-        elif mensaje in ["a", "a.", "acepto", "si", "sí"]:
-            respuesta = (
-                "✅ Gracias por confirmar.\n\n"
-                "Es un gusto atenderle.\n\n"
-                "Por favor, seleccione una de las siguientes opciones:\n\n"
-                "1️⃣ Información de admisiones\n\n"
-                "2️⃣ Ya soy representante de Ecomundo\n\n"
-                "3️⃣ Contactar a un asesor de admisiones\n\n"
-                "4️⃣ Salir\n\n"
-                "Responda únicamente con el número de la opción deseada."
-            )
+        elif mensaje == "acepto_privacidad" or mensaje in ["a", "si", "sí", "acepto"]:
+            USER_STATE[telefono] = {"estado": "menu"}
+            enviar_menu_principal(telefono)
 
-        elif mensaje in ["b", "b.", "no", "no acepto"]:
-            respuesta = (
+        elif mensaje == "no_acepto_privacidad" or mensaje in ["b", "no", "no acepto"]:
+            enviar_texto(
+                telefono,
                 "Gracias por contactarnos.\n\n"
                 "No podremos recopilar ni procesar información personal sin su consentimiento."
             )
 
-        elif mensaje == "1":
-            respuesta = menu_niveles()
+        elif mensaje == "menu_admisiones":
+            USER_STATE[telefono] = {"estado": "seleccion_grupo"}
+            enviar_lista_grupos_nivel(telefono)
 
-        elif mensaje == "2":
-            respuesta = (
+        elif mensaje == "menu_representante":
+            enviar_texto(
+                telefono,
                 "Gracias por escribirnos.\n\n"
                 "Este canal está orientado al proceso de admisiones. "
                 "Por favor indique brevemente su requerimiento para derivarlo al área correspondiente."
             )
-        
-        elif mensaje == "3":
-            respuesta = (
+
+        elif mensaje == "menu_asesor":
+            USER_STATE[telefono] = {"estado": "esperando_asesor"}
+            enviar_texto(
+                telefono,
                 "👩‍💼 Atención personalizada\n\n"
-                "Gracias por su interés en Ecomundo Educación Particular Bilingüe.\n\n"
-                "Puede comunicarse directamente con nuestro equipo de admisiones en el siguiente enlace:\n\n"
-                "📲 https://wa.me/593993083025?text=Hola,%20deseo%20información%20sobre%20admisiones%20de%20Ecomundo.\n\n"
-                "Nuestro equipo estará encantado de atenderle y acompañarle durante el proceso de admisión."
+                "Para que uno de nuestros asesores pueda atenderle, por favor envíe en un solo mensaje:\n\n"
+                "Nombre completo\n"
+                "Número de contacto\n"
+                "Nivel de interés\n\n"
+                "Ejemplo:\n"
+                "Victoria Méndez\n"
+                "0999999999\n"
+                "Octavo EGB"
             )
 
-        elif mensaje == "4":
-            respuesta = (
-                "Gracias por contactarse con Ecomundo Educación Particular Bilingüe.\n\n"
-                "Estamos atentos para apoyarle cuando lo necesite."
-            )
+        elif mensaje == "grupo_inicial":
+            enviar_lista_inicial(telefono)
 
-        elif mensaje in NIVELES:
-            nivel = NIVELES[mensaje]
-            respuesta = (
+        elif mensaje == "grupo_egb":
+            enviar_lista_egb(telefono)
+
+        elif mensaje == "grupo_bgu":
+            enviar_lista_bgu(telefono)
+
+        elif mensaje.startswith("nivel_"):
+            id_nivel = mensaje.replace("nivel_", "")
+            nivel = NIVELES.get(id_nivel, "No especificado")
+
+            USER_STATE[telefono] = {
+                "estado": "esperando_datos_admision",
+                "nivel": nivel
+            }
+
+            enviar_texto(
+                telefono,
                 f"Ha seleccionado: *{nivel}*.\n\n"
-                "Para continuar con el proceso de admisión, envíe los siguientes datos "
-                "en un solo mensaje, uno debajo del otro:\n\n"
+                "Para continuar con el proceso de admisión, envíe los siguientes datos en un solo mensaje:\n\n"
                 "Nombre del representante\n"
                 "Nombre del estudiante\n"
                 "Edad del estudiante\n"
-                f"{nivel}\n"
                 "Correo electrónico\n\n"
                 "Ejemplo:\n"
                 "María Pérez\n"
                 "Juan Pérez\n"
                 "10\n"
-                f"{nivel}\n"
                 "correo@ejemplo.com"
             )
 
         else:
-            datos = extraer_datos(mensaje_original)
+            estado_actual = USER_STATE.get(telefono, {}).get("estado")
 
-            if datos:
-                codigo = guardar_en_sheets(
-                    telefono,
-                    datos["representante"],
-                    datos["estudiante"],
-                    datos["edad"],
-                    datos["nivel"],
-                    datos["correo"]
-                )
+            if estado_actual == "esperando_datos_admision":
+                datos = extraer_datos_admision(mensaje_original)
+                nivel = USER_STATE.get(telefono, {}).get("nivel", "")
 
-                respuesta = (
-                    "✅ Información registrada correctamente.\n\n"
-                    f"Su código de caso es: *{codigo}*.\n\n"
-                    "Un asesor de admisiones se comunicará con usted en breve.\n\n"
-                    "Gracias por elegir Ecomundo."
-                )
+                if datos:
+                    codigo = guardar_en_sheets(
+                        telefono,
+                        datos["representante"],
+                        datos["estudiante"],
+                        datos["edad"],
+                        nivel,
+                        datos["correo"],
+                        "Nuevo",
+                        ""
+                    )
+
+                    enviar_texto(
+                        telefono,
+                        "✅ Información registrada correctamente.\n\n"
+                        f"Su código de caso es: *{codigo}*.\n\n"
+                        "Un asesor de admisiones se comunicará con usted en breve.\n\n"
+                        "Gracias por elegir Ecomundo."
+                    )
+
+                    USER_STATE[telefono] = {"estado": "finalizado"}
+
+                else:
+                    enviar_texto(
+                        telefono,
+                        "No logramos registrar la información.\n\n"
+                        "Por favor envíe los datos en este orden:\n\n"
+                        "Nombre del representante\n"
+                        "Nombre del estudiante\n"
+                        "Edad del estudiante\n"
+                        "Correo electrónico"
+                    )
+
+            elif estado_actual == "esperando_asesor":
+                datos = extraer_datos_asesor(mensaje_original)
+
+                if datos:
+                    codigo = guardar_en_sheets(
+                        telefono,
+                        datos["nombre"],
+                        "",
+                        "",
+                        datos["nivel"],
+                        "",
+                        "Pendiente Asesor",
+                        "Por asignar"
+                    )
+
+                    enviar_texto(
+                        telefono,
+                        "✅ Su solicitud ha sido registrada correctamente.\n\n"
+                        f"Su código de caso es: *{codigo}*.\n\n"
+                        "Uno de nuestros asesores de admisiones se comunicará con usted en breve "
+                        "para brindarle atención personalizada."
+                    )
+
+                    USER_STATE[telefono] = {"estado": "finalizado"}
+
+                else:
+                    enviar_texto(
+                        telefono,
+                        "Por favor envíe los datos en este orden:\n\n"
+                        "Nombre completo\n"
+                        "Número de contacto\n"
+                        "Nivel de interés"
+                    )
+
             else:
-                respuesta = (
-                    "No logramos registrar la información.\n\n"
-                    "Por favor escriba *Hola* para iniciar nuevamente."
+                enviar_texto(
+                    telefono,
+                    "Para iniciar el proceso de admisiones, escriba: *Hola*"
                 )
-
-        enviar_whatsapp(telefono, respuesta)
 
     except Exception as e:
         print("ERROR EN WEBHOOK:", e)

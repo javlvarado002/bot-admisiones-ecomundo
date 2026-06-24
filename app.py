@@ -1,4 +1,3 @@
-
 import os
 import json
 import requests
@@ -41,11 +40,47 @@ NIVELES = {
 }
 
 
-def conectar_sheet():
+def conectar_google():
     cred_dict = json.loads(GOOGLE_CREDENTIALS)
     credentials = Credentials.from_service_account_info(cred_dict, scopes=SCOPES)
-    gc = gspread.authorize(credentials)
+    return gspread.authorize(credentials)
+
+
+def conectar_sheet():
+    gc = conectar_google()
     return gc.open("Admisiones Ecomundo").sheet1
+
+
+def obtener_asesor():
+    gc = conectar_google()
+    hoja_asesores = gc.open("Admisiones Ecomundo").worksheet("Asesores")
+
+    asesores = hoja_asesores.get_all_records()
+
+    activos = [
+        a for a in asesores
+        if str(a.get("Activo", "")).strip().lower() == "si"
+    ]
+
+    if not activos:
+        return "Sin asesor disponible"
+
+    for asesor in activos:
+        if asesor.get("Asignados", "") == "":
+            asesor["Asignados"] = 0
+
+    activos = sorted(
+        activos,
+        key=lambda x: int(x.get("Asignados", 0))
+    )
+
+    asesor = activos[0]
+    fila = asesores.index(asesor) + 2
+    actual = int(asesor.get("Asignados", 0))
+
+    hoja_asesores.update_cell(fila, 5, actual + 1)
+
+    return asesor["Nombres y Apellidos"]
 
 
 def generar_codigo_caso():
@@ -76,6 +111,7 @@ def guardar_en_sheets(telefono, representante, estudiante, edad, nivel, correo, 
 
 def enviar_payload(payload):
     url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
+
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
@@ -124,6 +160,7 @@ def enviar_botones_privacidad(telefono):
             }
         }
     }
+
     enviar_payload(payload)
 
 
@@ -158,6 +195,7 @@ def enviar_menu_principal(telefono):
             }
         }
     }
+
     enviar_payload(payload)
 
 
@@ -191,6 +229,7 @@ def enviar_lista_grupos_nivel(telefono):
             }
         }
     }
+
     enviar_payload(payload)
 
 
@@ -247,6 +286,7 @@ def enviar_lista_niveles(telefono, titulo, filas):
             }
         }
     }
+
     enviar_payload(payload)
 
 
@@ -413,6 +453,8 @@ def webhook():
                 nivel = USER_STATE.get(telefono, {}).get("nivel", "")
 
                 if datos:
+                    asesor = obtener_asesor()
+
                     codigo = guardar_en_sheets(
                         telefono,
                         datos["representante"],
@@ -420,16 +462,17 @@ def webhook():
                         datos["edad"],
                         nivel,
                         datos["correo"],
-                        "Nuevo",
-                        ""
+                        "Pendiente Contacto",
+                        asesor
                     )
 
                     enviar_texto(
                         telefono,
                         "✅ Información registrada correctamente.\n\n"
-                        f"Su código de caso es: *{codigo}*.\n\n"
-                        "Un asesor de admisiones se comunicará con usted en breve.\n\n"
-                        "Gracias por elegir Ecomundo."
+                        f"📋 Código de seguimiento:\n*{codigo}*\n\n"
+                        f"👩‍💼 Asesor asignado:\n*{asesor}*\n\n"
+                        "Uno de nuestros asesores se pondrá en contacto con usted en las próximas horas.\n\n"
+                        "Gracias por considerar a Ecomundo Educación Particular Bilingüe."
                     )
 
                     USER_STATE[telefono] = {"estado": "finalizado"}
@@ -449,6 +492,8 @@ def webhook():
                 datos = extraer_datos_asesor(mensaje_original)
 
                 if datos:
+                    asesor = obtener_asesor()
+
                     codigo = guardar_en_sheets(
                         telefono,
                         datos["nombre"],
@@ -456,14 +501,15 @@ def webhook():
                         "",
                         datos["nivel"],
                         "",
-                        "Pendiente Asesor",
-                        "Por asignar"
+                        "Pendiente Contacto",
+                        asesor
                     )
 
                     enviar_texto(
                         telefono,
                         "✅ Su solicitud ha sido registrada correctamente.\n\n"
-                        f"Su código de caso es: *{codigo}*.\n\n"
+                        f"📋 Código de seguimiento:\n*{codigo}*\n\n"
+                        f"👩‍💼 Asesor asignado:\n*{asesor}*\n\n"
                         "Uno de nuestros asesores de admisiones se comunicará con usted en breve "
                         "para brindarle atención personalizada."
                     )

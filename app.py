@@ -20,25 +20,41 @@ SCOPES = [
 
 USER_STATE = {}
 
-PRIVACIDAD_URL = "https://ecomundo.edu.ec/np/wp-content/uploads/2025/11/CONSENTIMIENTO-PARA-EL-TRATAMIENTO-DE-DATOS-PERSONALES-TERCEROS-formularios.pdf"
+PRIVACIDAD_URL = "https://drive.google.com/file/d/1TOKTHGoGhYCJPfeWzq4y-Aq-vLIanbFf/view?usp=sharing"
 
 NIVELES = {
     "1": "Maternal",
     "2": "Inicial 2 (3 años)",
     "3": "Inicial 2 (4 años)",
-    "4": "PRIMER GRADO",
-    "5": "SEGUNDO GRADO",
-    "6": "TERCER GRADO",
-    "7": "CUARTO GRADO",
-    "8": "QUINTO GRADO",
-    "9": "SEXTO GRADO",
-    "10": "SÉPTIMO GRADO",
-    "11": "OCTAVO GRADO",
-    "12": "NOVENO GRADO",
-    "13": "DÉCIMO GRADO",
-    "14": "PRIMERO BACHILLERATO",
-    "15": "SEGUNDO BACHILLERATO"
+    "4": "Primer Grado",
+    "5": "Segundo Grado",
+    "6": "Tercer Grado",
+    "7": "Cuarto Grado",
+    "8": "Quinto Grado",
+    "9": "Sexto Grado",
+    "10": "Séptimo Grado",
+    "11": "Octavo Grado",
+    "12": "Noveno Grado",
+    "13": "Décimo Grado",
+    "14": "Primero de Bachillerato",
+    "15": "Segundo de Bachillerato"
 }
+
+NIVELES_TEXTO = """1️⃣ Maternal
+2️⃣ Inicial 2 (3 años)
+3️⃣ Inicial 2 (4 años)
+4️⃣ Primer Grado
+5️⃣ Segundo Grado
+6️⃣ Tercer Grado
+7️⃣ Cuarto Grado
+8️⃣ Quinto Grado
+9️⃣ Sexto Grado
+🔟 Séptimo Grado
+1️⃣1️⃣ Octavo Grado
+1️⃣2️⃣ Noveno Grado
+1️⃣3️⃣ Décimo Grado
+1️⃣4️⃣ Primero de Bachillerato
+1️⃣5️⃣ Segundo de Bachillerato"""
 
 
 def conectar_google():
@@ -60,31 +76,27 @@ def obtener_asesor():
     activos = []
 
     for index, asesor in enumerate(asesores, start=2):
-        activo = str(asesor.get("Activo", "")).strip().lower()
-
-        if activo == "si":
-            asignados = asesor.get("Asignados", 0)
-            if asignados == "":
-                asignados = 0
-
+        if str(asesor.get("Activo", "")).strip().lower() == "si":
+            asignados = asesor.get("Asignados", 0) or 0
             activos.append({
                 "fila": index,
                 "nombre": asesor.get("Nombres", "Asesor asignado"),
+                "whatsapp": str(asesor.get("WhatsApp", "")).strip(),
                 "asignados": int(asignados)
             })
 
     if not activos:
-        return "Sin asesor disponible"
+        return "Sin asesor disponible", ""
 
-    asesor_seleccionado = sorted(activos, key=lambda x: x["asignados"])[0]
+    asesor = sorted(activos, key=lambda x: x["asignados"])[0]
 
     hoja_asesores.update_cell(
-        asesor_seleccionado["fila"],
+        asesor["fila"],
         5,
-        asesor_seleccionado["asignados"] + 1
+        asesor["asignados"] + 1
     )
 
-    return asesor_seleccionado["nombre"]
+    return asesor["nombre"], asesor["whatsapp"]
 
 
 def generar_codigo_caso():
@@ -93,19 +105,19 @@ def generar_codigo_caso():
     return f"ADM-2026-{total_filas:04d}"
 
 
-def guardar_en_sheets(telefono_whatsapp, representante, estudiante, edad, nivel, correo, estado, asesor=""):
+def guardar_en_sheets(telefono_contacto, representante, nivel, correo, asesor):
     sheet = conectar_sheet()
     codigo = generar_codigo_caso()
 
     sheet.append_row([
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        telefono_whatsapp,
+        telefono_contacto,
         representante,
-        estudiante,
-        edad,
+        "",
+        "",
         nivel,
         correo,
-        estado,
+        "Pendiente Contacto",
         asesor,
         codigo
     ])
@@ -135,7 +147,7 @@ def enviar_texto(telefono, mensaje):
     enviar_payload(payload)
 
 
-def enviar_botones_privacidad(telefono):
+def enviar_privacidad(telefono):
     payload = {
         "messaging_product": "whatsapp",
         "to": telefono,
@@ -163,18 +175,15 @@ def enviar_botones_privacidad(telefono):
 
 
 def mensaje_solicitud_datos():
-    niveles = "\n".join([f"{k}. {v}" for k, v in NIVELES.items()])
-
     return (
         "✅ ¡Gracias por confirmar!\n\n"
-        "Para continuar con el proceso de admisión, por favor envíe los siguientes datos en un solo mensaje. "
-        "Esta información nos sirve para poder tomar contacto inmediato con usted:\n\n"
-        "Nombre del representante:\n"
-        "Correo:\n"
-        "Teléfono:\n"
-        "Seleccione el número del nivel de estudio de su interés:\n\n"
-        f"{niveles}\n\n"
-        "Ejemplo:\n"
+        "Para continuar con el proceso de admisión, envíe en un solo mensaje la siguiente información:\n\n"
+        "👤 Nombre del representante\n"
+        "📧 Correo electrónico\n"
+        "📱 Teléfono de contacto\n"
+        "🎓 Número del nivel de estudio de su interés\n\n"
+        f"{NIVELES_TEXTO}\n\n"
+        "📝 *Ejemplo:*\n\n"
         "María Pérez\n"
         "correo@ejemplo.com\n"
         "0999999999\n"
@@ -182,135 +191,134 @@ def mensaje_solicitud_datos():
     )
 
 
-def enviar_menu_consultas(telefono):
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": telefono,
-        "type": "interactive",
-        "interactive": {
-            "type": "list",
-            "body": {
-                "text": "Por favor escoja la información que desea consultar:"
-            },
-            "action": {
-                "button": "Ver opciones",
-                "sections": [
-                    {
-                        "title": "Información disponible",
-                        "rows": [
-                            {"id": "info_proceso", "title": "Proceso de admisión"},
-                            {"id": "info_precios", "title": "Precios"},
-                            {"id": "info_extracurriculares", "title": "Extracurriculares"},
-                            {"id": "info_descuentos", "title": "Descuentos disponibles"},
-                            {"id": "info_inscripcion", "title": "Inscripción"},
-                            {"id": "info_asesor", "title": "Contactar con un asesor"}
-                        ]
-                    }
-                ]
-            }
-        }
-    }
-    enviar_payload(payload)
+def mensaje_menu():
+    return (
+        "📚 ¿Qué información desea consultar?\n\n"
+        "1️⃣ 📋 Proceso de admisión\n"
+        "2️⃣ 💰 Precios\n"
+        "3️⃣ ⚽ Actividades extracurriculares\n"
+        "4️⃣ 🎁 Descuentos disponibles\n"
+        "5️⃣ 📝 Inscripción\n"
+        "6️⃣ 👩‍💼 Contactar con un asesor\n\n"
+        "✍️ Escriba únicamente el número de la opción que desea consultar."
+    )
 
 
 def extraer_mensaje(value):
     msg = value["messages"][0]
 
     if msg["type"] == "text":
-        return msg["text"]["body"].strip(), "text"
+        return msg["text"]["body"].strip()
 
     if msg["type"] == "interactive":
         interactive = msg["interactive"]
 
         if interactive["type"] == "button_reply":
-            return interactive["button_reply"]["id"], "button"
+            return interactive["button_reply"]["id"]
 
         if interactive["type"] == "list_reply":
-            return interactive["list_reply"]["id"], "list"
+            return interactive["list_reply"]["id"]
 
-    return "", "unknown"
+    return ""
 
 
 def extraer_datos_admision(mensaje):
     lineas = [linea.strip() for linea in mensaje.split("\n") if linea.strip()]
 
-    if len(lineas) >= 4:
-        nivel_codigo = lineas[3].strip()
-        nivel = NIVELES.get(nivel_codigo, "No especificado")
+    if len(lineas) < 4:
+        return None
 
-        return {
-            "representante": lineas[0],
-            "correo": lineas[1],
-            "telefono_contacto": lineas[2],
-            "nivel": nivel,
-            "nivel_codigo": nivel_codigo
-        }
+    nivel_codigo = lineas[3]
+    nivel = NIVELES.get(nivel_codigo)
 
-    return None
+    if not nivel:
+        return None
+
+    return {
+        "representante": lineas[0],
+        "correo": lineas[1],
+        "telefono_contacto": lineas[2],
+        "nivel": nivel
+    }
 
 
-def enviar_respuesta_menu(telefono, opcion, asesor="", codigo=""):
-    if opcion == "info_proceso":
+def responder_opcion_menu(telefono, opcion):
+    estado = USER_STATE.get(telefono, {})
+    asesor = estado.get("asesor", "Asesor asignado")
+    asesor_whatsapp = estado.get("asesor_whatsapp", "")
+    codigo = estado.get("codigo", "")
+
+    if opcion == "1":
         enviar_texto(
             telefono,
-            "📌 *Proceso de admisión*\n\n"
-            "1. Registro de datos del representante.\n"
-            "2. Contacto por parte del equipo de admisiones.\n"
-            "3. Revisión de disponibilidad según el nivel solicitado.\n"
-            "4. Agendamiento de entrevista o visita institucional.\n"
-            "5. Continuación del proceso de matrícula según los requisitos establecidos."
+            "📋 *Proceso de admisión*\n\n"
+            "Nuestro proceso inicia con el registro de datos del representante. "
+            "Posteriormente, el equipo de admisiones tomará contacto para brindar información personalizada, "
+            "validar disponibilidad del nivel de interés y orientar los siguientes pasos del proceso."
         )
 
-    elif opcion == "info_precios":
+    elif opcion == "2":
         enviar_texto(
             telefono,
             "💰 *Precios*\n\n"
-            "La información de valores puede variar según el nivel de estudio solicitado.\n\n"
-            "Un asesor de admisiones le brindará la información actualizada y personalizada."
+            "Los valores pueden variar según el nivel de estudio solicitado. "
+            "Un asesor de admisiones le compartirá la información actualizada y personalizada."
         )
 
-    elif opcion == "info_extracurriculares":
+    elif opcion == "3":
         enviar_texto(
             telefono,
-            "🎨 *Extracurriculares*\n\n"
+            "⚽ *Actividades extracurriculares*\n\n"
             "Ecomundo cuenta con actividades orientadas al desarrollo integral de los estudiantes, "
-            "incluyendo áreas deportivas, artísticas, tecnológicas y formativas.\n\n"
-            "Un asesor podrá brindarle el detalle disponible según el nivel."
+            "incluyendo áreas deportivas, artísticas, tecnológicas y formativas."
         )
 
-    elif opcion == "info_descuentos":
+    elif opcion == "4":
         enviar_texto(
             telefono,
-            "🏷️ *Descuentos disponibles*\n\n"
+            "🎁 *Descuentos disponibles*\n\n"
             "Los descuentos y beneficios dependen de las políticas institucionales vigentes, "
-            "nivel de ingreso y condiciones aplicables.\n\n"
-            "Un asesor de admisiones le brindará información personalizada."
+            "el nivel de ingreso y las condiciones aplicables. "
+            "Un asesor podrá brindarle mayor información."
         )
 
-    elif opcion == "info_inscripcion":
+    elif opcion == "5":
         enviar_texto(
             telefono,
             "📝 *Inscripción*\n\n"
-            "Puede continuar con el proceso de inscripción mediante el enlace o QR oficial que será proporcionado por el área de admisiones.\n\n"
-            "Si ya cuenta con el enlace institucional, puede completarlo y un asesor dará seguimiento a su solicitud."
+            "El área de admisiones le proporcionará el enlace o QR oficial para continuar con el proceso de inscripción."
         )
 
-    elif opcion == "info_asesor":
-        enviar_texto(
-            telefono,
-            f"👩‍💼 *Contactar con un asesor*\n\n"
-            f"Su solicitud ya fue registrada.\n\n"
+    elif opcion == "6":
+        mensaje = (
+            "👩‍💼 *Contactar con un asesor*\n\n"
             f"📋 Código de seguimiento: *{codigo}*\n"
             f"👩‍💼 Asesor asignado: *{asesor}*\n\n"
-            "Uno de nuestros asesores se pondrá en contacto con usted en las próximas horas."
         )
 
-    enviar_menu_consultas(telefono)
+        if asesor_whatsapp:
+            numero = asesor_whatsapp.replace(" ", "")
+            if numero.startswith("0"):
+                numero = "593" + numero[1:]
+
+            mensaje += (
+                "Puede contactar directamente a su asesor en el siguiente enlace:\n"
+                f"https://wa.me/{numero}?text=Hola,%20deseo%20información%20sobre%20mi%20proceso%20de%20admisión.%20Mi%20código%20es%20{codigo}"
+            )
+        else:
+            mensaje += "Uno de nuestros asesores se pondrá en contacto con usted en las próximas horas."
+
+        enviar_texto(telefono, mensaje)
+
+    else:
+        enviar_texto(telefono, "Por favor seleccione una opción válida del 1 al 6.")
+
+    enviar_texto(telefono, "\n━━━━━━━━━━━━━━━━━━━━━━\n\n" + mensaje_menu())
 
 
 @app.route("/")
 def home():
-    return "Bot Admisiones Ecomundo"
+    return "Bot Admisiones Ecomundo activo"
 
 
 @app.route("/webhook", methods=["GET"])
@@ -337,102 +345,87 @@ def webhook():
             return "OK", 200
 
         telefono = value["messages"][0]["from"]
-        mensaje_original, tipo = extraer_mensaje(value)
-        mensaje = mensaje_original.lower()
+        mensaje_original = extraer_mensaje(value)
+        mensaje = mensaje_original.lower().strip()
 
         print("TELÉFONO:", telefono)
         print("MENSAJE:", mensaje_original)
 
-        if mensaje in ["hola", "inicio", "menu", "menú"]:
+        if mensaje in ["hola", "inicio", "menu", "menú", "reiniciar", "reset"]:
             USER_STATE[telefono] = {"estado": "inicio"}
-            enviar_botones_privacidad(telefono)
+            enviar_privacidad(telefono)
+            return "OK", 200
 
-        elif mensaje == "acepto_privacidad" or mensaje in ["a", "si", "sí", "acepto"]:
+        if mensaje in ["acepto_privacidad", "a", "si", "sí", "acepto"]:
             USER_STATE[telefono] = {"estado": "esperando_datos"}
             enviar_texto(telefono, mensaje_solicitud_datos())
+            return "OK", 200
 
-        elif mensaje == "no_acepto_privacidad" or mensaje in ["b", "no", "no acepto"]:
+        if mensaje in ["no_acepto_privacidad", "b", "no", "no acepto"]:
             USER_STATE[telefono] = {"estado": "finalizado"}
             enviar_texto(
                 telefono,
                 "Gracias por contactarnos.\n\n"
                 "No podremos recopilar ni procesar información personal sin su consentimiento."
             )
+            return "OK", 200
 
-        elif mensaje in [
-            "info_proceso",
-            "info_precios",
-            "info_extracurriculares",
-            "info_descuentos",
-            "info_inscripcion",
-            "info_asesor"
-        ]:
-            estado = USER_STATE.get(telefono, {})
-            enviar_respuesta_menu(
-                telefono,
-                mensaje,
-                asesor=estado.get("asesor", ""),
-                codigo=estado.get("codigo", "")
-            )
+        estado_actual = USER_STATE.get(telefono, {}).get("estado")
 
-        else:
-            estado_actual = USER_STATE.get(telefono, {}).get("estado")
+        if estado_actual == "esperando_datos":
+            datos = extraer_datos_admision(mensaje_original)
 
-            if estado_actual == "esperando_datos":
-                datos = extraer_datos_admision(mensaje_original)
-
-                if datos:
-                    asesor = obtener_asesor()
-
-                    codigo = guardar_en_sheets(
-                        telefono,
-                        datos["representante"],
-                        "",
-                        "",
-                        datos["nivel"],
-                        datos["correo"],
-                        "Pendiente Contacto",
-                        asesor
-                    )
-
-                    USER_STATE[telefono] = {
-                        "estado": "menu_consultas",
-                        "asesor": asesor,
-                        "codigo": codigo,
-                        "nivel": datos["nivel"]
-                    }
-
-                    enviar_texto(
-                        telefono,
-                        "✅ Información registrada correctamente.\n\n"
-                        f"📋 Código de seguimiento:\n*{codigo}*\n\n"
-                        f"👩‍💼 Asesor asignado:\n*{asesor}*\n\n"
-                        "A continuación puede consultar información adicional sobre el proceso de admisión."
-                    )
-
-                    enviar_menu_consultas(telefono)
-
-                else:
-                    enviar_texto(
-                        telefono,
-                        "No logramos registrar la información.\n\n"
-                        "Por favor envíe los datos en este orden:\n\n"
-                        "Nombre del representante\n"
-                        "Correo\n"
-                        "Teléfono\n"
-                        "Número del nivel de interés\n\n"
-                        "Ejemplo:\n"
-                        "María Pérez\n"
-                        "correo@ejemplo.com\n"
-                        "0999999999\n"
-                        "15"
-                    )
-
-            else:
+            if not datos:
                 enviar_texto(
                     telefono,
-                    "Para iniciar el proceso de admisiones, escriba: *Hola*"
+                    "No logramos registrar la información.\n\n"
+                    "Por favor envíe los datos en este orden:\n\n"
+                    "👤 Nombre del representante\n"
+                    "📧 Correo electrónico\n"
+                    "📱 Teléfono de contacto\n"
+                    "🎓 Número del nivel de interés\n\n"
+                    "Ejemplo:\n"
+                    "María Pérez\n"
+                    "correo@ejemplo.com\n"
+                    "0999999999\n"
+                    "15"
                 )
+                return "OK", 200
+
+            asesor, asesor_whatsapp = obtener_asesor()
+
+            codigo = guardar_en_sheets(
+                datos["telefono_contacto"],
+                datos["representante"],
+                datos["nivel"],
+                datos["correo"],
+                asesor
+            )
+
+            USER_STATE[telefono] = {
+                "estado": "menu_consultas",
+                "asesor": asesor,
+                "asesor_whatsapp": asesor_whatsapp,
+                "codigo": codigo,
+                "nivel": datos["nivel"]
+            }
+
+            enviar_texto(
+                telefono,
+                "✅ Información registrada correctamente.\n\n"
+                f"📋 Código de seguimiento:\n*{codigo}*\n\n"
+                f"👩‍💼 Asesor asignado:\n*{asesor}*\n\n"
+                "A continuación puede consultar información adicional sobre el proceso de admisión."
+            )
+
+            enviar_texto(telefono, mensaje_menu())
+            return "OK", 200
+
+        if estado_actual == "menu_consultas":
+            responder_opcion_menu(telefono, mensaje)
+            return "OK", 200
+
+        enviar_texto(telefono, "Para iniciar el proceso de admisiones, escriba: *Hola*")
 
     except Exception as e:
         print("ERROR EN WEBHOOK:", e)

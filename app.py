@@ -49,12 +49,12 @@ NIVELES_TEXTO = """1️⃣ Maternal
 7️⃣ Cuarto Grado
 8️⃣ Quinto Grado
 9️⃣ Sexto Grado
-10. Séptimo Grado
-11. Octavo Grado
-12. Noveno Grado
-13. Décimo Grado
-14. Primero de Bachillerato
-15. Segundo de Bachillerato"""
+🔟 Séptimo Grado
+1️⃣1️⃣ Octavo Grado
+1️⃣2️⃣ Noveno Grado
+1️⃣3️⃣ Décimo Grado
+1️⃣4️⃣ Primero de Bachillerato
+1️⃣5️⃣ Segundo de Bachillerato"""
 
 
 def conectar_google():
@@ -89,7 +89,12 @@ def obtener_asesor():
         return "Sin asesor disponible", ""
 
     asesor = sorted(activos, key=lambda x: x["asignados"])[0]
-    hoja_asesores.update_cell(asesor["fila"], 5, asesor["asignados"] + 1)
+
+    hoja_asesores.update_cell(
+        asesor["fila"],
+        5,
+        asesor["asignados"] + 1
+    )
 
     return asesor["nombre"], asesor["whatsapp"]
 
@@ -122,6 +127,7 @@ def guardar_en_sheets(telefono_contacto, representante, nivel, correo, asesor):
 
 def enviar_payload(payload):
     url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
+
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
@@ -185,24 +191,6 @@ def mensaje_solicitud_datos():
     )
 
 
-def mensaje_otro_estudiante():
-    return (
-        "¿Desea registrar otro estudiante?\n\n"
-        "1️⃣ Sí, registrar otro nivel de interés\n"
-        "2️⃣ No, continuar\n\n"
-        "✍️ Escriba 1 o 2."
-    )
-
-
-def mensaje_pedir_otro_nivel():
-    return (
-        "🎓 Por favor escriba el número del nivel de estudio de interés para el otro estudiante:\n\n"
-        f"{NIVELES_TEXTO}\n\n"
-        "📝 Ejemplo:\n"
-        "4"
-    )
-
-
 def mensaje_menu():
     return (
         "📚 ¿Qué información desea consultar?\n\n"
@@ -227,6 +215,9 @@ def extraer_mensaje(value):
 
         if interactive["type"] == "button_reply":
             return interactive["button_reply"]["id"]
+
+        if interactive["type"] == "list_reply":
+            return interactive["list_reply"]["id"]
 
     return ""
 
@@ -263,7 +254,7 @@ def responder_opcion_menu(telefono, opcion):
             "📋 *Proceso de admisión*\n\n"
             "Nuestro proceso inicia con el registro de datos del representante. "
             "Posteriormente, el equipo de admisiones tomará contacto para brindar información personalizada, "
-            "validar disponibilidad del nivel de interés y orientar los siguientes pasos."
+            "validar disponibilidad del nivel de interés y orientar los siguientes pasos del proceso."
         )
 
     elif opcion == "2":
@@ -287,7 +278,8 @@ def responder_opcion_menu(telefono, opcion):
             telefono,
             "🎁 *Descuentos disponibles*\n\n"
             "Los descuentos y beneficios dependen de las políticas institucionales vigentes, "
-            "el nivel de ingreso y las condiciones aplicables."
+            "el nivel de ingreso y las condiciones aplicables. "
+            "Un asesor podrá brindarle mayor información."
         )
 
     elif opcion == "5":
@@ -411,10 +403,7 @@ def webhook():
             )
 
             USER_STATE[telefono] = {
-                "estado": "preguntar_otro_estudiante",
-                "representante": datos["representante"],
-                "correo": datos["correo"],
-                "telefono_contacto": datos["telefono_contacto"],
+                "estado": "menu_consultas",
                 "asesor": asesor,
                 "asesor_whatsapp": asesor_whatsapp,
                 "codigo": codigo,
@@ -425,59 +414,11 @@ def webhook():
                 telefono,
                 "✅ Información registrada correctamente.\n\n"
                 f"📋 Código de seguimiento:\n*{codigo}*\n\n"
-                f"👩‍💼 Asesor asignado:\n*{asesor}*"
+                f"👩‍💼 Asesor asignado:\n*{asesor}*\n\n"
+                "A continuación puede consultar información adicional sobre el proceso de admisión."
             )
 
-            enviar_texto(telefono, mensaje_otro_estudiante())
-            return "OK", 200
-
-        if estado_actual == "preguntar_otro_estudiante":
-            if mensaje == "1":
-                USER_STATE[telefono]["estado"] = "esperando_otro_nivel"
-                enviar_texto(telefono, mensaje_pedir_otro_nivel())
-                return "OK", 200
-
-            if mensaje == "2":
-                USER_STATE[telefono]["estado"] = "menu_consultas"
-                enviar_texto(
-                    telefono,
-                    "Perfecto. A continuación puede consultar información adicional sobre el proceso de admisión."
-                )
-                enviar_texto(telefono, mensaje_menu())
-                return "OK", 200
-
-            enviar_texto(telefono, mensaje_otro_estudiante())
-            return "OK", 200
-
-        if estado_actual == "esperando_otro_nivel":
-            nivel = NIVELES.get(mensaje_original.strip())
-
-            if not nivel:
-                enviar_texto(telefono, "Por favor escriba un número válido del 1 al 15.")
-                enviar_texto(telefono, mensaje_pedir_otro_nivel())
-                return "OK", 200
-
-            estado = USER_STATE.get(telefono, {})
-            codigo = guardar_en_sheets(
-                estado.get("telefono_contacto", telefono),
-                estado.get("representante", ""),
-                nivel,
-                estado.get("correo", ""),
-                estado.get("asesor", "")
-            )
-
-            USER_STATE[telefono]["codigo"] = codigo
-            USER_STATE[telefono]["nivel"] = nivel
-            USER_STATE[telefono]["estado"] = "preguntar_otro_estudiante"
-
-            enviar_texto(
-                telefono,
-                "✅ Nivel adicional registrado correctamente.\n\n"
-                f"📋 Código de seguimiento:\n*{codigo}*\n\n"
-                f"🎓 Nivel registrado: *{nivel}*"
-            )
-
-            enviar_texto(telefono, mensaje_otro_estudiante())
+            enviar_texto(telefono, mensaje_menu())
             return "OK", 200
 
         if estado_actual == "menu_consultas":

@@ -1,26 +1,63 @@
 import os
 import json
+import re
+from datetime import datetime
+
 import requests
 import gspread
-from datetime import datetime
 from flask import Flask, request
 from google.oauth2.service_account import Credentials
 
+
+# ============================================================
+# BOT ADMISIONES ECOMUNDO - APP.PY V2.0
+# ============================================================
+# Requisitos en requirements.txt:
+# Flask
+# gunicorn
+# requests
+# gspread
+# google-auth
+#
+# Variables de entorno en Render:
+# VERIFY_TOKEN=ecomundo2026
+# WHATSAPP_TOKEN=...
+# PHONE_NUMBER_ID=...
+# GOOGLE_CREDENTIALS={JSON completo de la cuenta de servicio}
+# ============================================================
+
+
 app = Flask(__name__)
+
+
+# ============================================================
+# CONFIGURACIÓN GENERAL
+# ============================================================
 
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "ecomundo2026")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 GOOGLE_CREDENTIALS = os.environ.get("GOOGLE_CREDENTIALS")
 
+SPREADSHEET_NAME = "Admisiones Ecomundo"
+ASESORES_SHEET_NAME = "Asesores"
+
+PRIVACIDAD_URL = (
+    "https://ecomundo.edu.ec/np/wp-content/uploads/2025/11/"
+    "CONSENTIMIENTO-PARA-EL-TRATAMIENTO-DE-DATOS-PERSONALES-TERCEROS-formularios.pdf"
+)
+
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/drive",
 ]
 
 USER_STATE = {}
 
-PRIVACIDAD_URL = "https://ecomundo.edu.ec/np/wp-content/uploads/2025/11/CONSENTIMIENTO-PARA-EL-TRATAMIENTO-DE-DATOS-PERSONALES-TERCEROS-formularios.pdf"
+
+# ============================================================
+# CATÁLOGOS
+# ============================================================
 
 NIVELES = {
     "1": "Maternal",
@@ -37,7 +74,7 @@ NIVELES = {
     "12": "Noveno Grado",
     "13": "Décimo Grado",
     "14": "Primero de Bachillerato",
-    "15": "Segundo de Bachillerato"
+    "15": "Segundo de Bachillerato",
 }
 
 NIVELES_TEXTO = """1️⃣ Maternal
@@ -56,52 +93,48 @@ NIVELES_TEXTO = """1️⃣ Maternal
 14. Primero de Bachillerato
 15. Segundo de Bachillerato"""
 
+MENU_OPCIONES_VALIDAS = {"1", "2", "3", "4", "5", "6", "7"}
+
+
+# ============================================================
+# GOOGLE SHEETS
+# ============================================================
 
 def conectar_google():
+    if not GOOGLE_CREDENTIALS:
+        raise RuntimeError("Falta GOOGLE_CREDENTIALS en variables de entorno.")
+
     cred_dict = json.loads(GOOGLE_CREDENTIALS)
     credentials = Credentials.from_service_account_info(cred_dict, scopes=SCOPES)
     return gspread.authorize(credentials)
 
 
-def conectar_sheet():
+def obtener_spreadsheet():
     gc = conectar_google()
-    return gc.open("Admisiones Ecomundo").sheet1
+    return gc.open(SPREADSHEET_NAME)
 
 
-def obtener_asesor():
-    gc = conectar_google()
-    hoja_asesores = gc.open("Admisiones Ecomundo").worksheet("Asesores")
-    asesores = hoja_asesores.get_all_records()
+def hoja_admisiones():
+    return obtener_spreadsheet().sheet1
 
-    activos = []
 
-    for index, asesor in enumerate(asesores, start=2):
-        if str(asesor.get("Activo", "")).strip().lower() == "si":
-            asignados = asesor.get("Asignados", 0) or 0
-            activos.append({
-                "fila": index,
-                "nombre": asesor.get("Nombres", "Asesor asignado"),
-                "whatsapp": str(asesor.get("WhatsApp", "")).strip(),
-                "asignados": int(asignados)
-            })
-
-    if not activos:
-        return "Sin asesor disponible", ""
-
-    asesor = sorted(activos, key=lambda x: x["asignados"])[0]
-    hoja_asesores.update_cell(asesor["fila"], 5, asesor["asignados"] + 1)
-
-    return asesor["nombre"], asesor["whatsapp"]
+def hoja_asesores():
+    return obtener_spreadsheet().worksheet(ASESORES_SHEET_NAME)
 
 
 def generar_codigo_caso():
-    sheet = conectar_sheet()
+    sheet = hoja_admisiones()
     total_filas = len(sheet.get_all_values())
     return f"ADM-2026-{total_filas:04d}"
 
 
-def guardar_en_sheets(telefono_contacto, representante, nivel, correo, asesor):
-    sheet = conectar_sheet()
+def guardar_lead(telefono_contacto, representante, nivel, correo, asesor):
+    """
+    Guarda un registro en la hoja principal.
+    Orden esperado:
+    Fecha | Teléfono WhatsApp | Nombre Representante | Nombre Estudiante | Edad | Nivel | Correo | Estado | Asesor | Código
+    """
+    sheet = hoja_admisiones()
     codigo = generar_codigo_caso()
 
     sheet.append_row([
@@ -114,20 +147,72 @@ def guardar_en_sheets(telefono_contacto, representante, nivel, correo, asesor):
         correo,
         "Pendiente Contacto",
         asesor,
-        codigo
+        codigo,
     ])
 
     return codigo
 
 
+def obtener_asesor():
+    """
+    Asignación automática tipo balanceo por menor cantidad de asignados.
+    Requiere hoja 'Asesores' con columnas:
+    Nombres | Correo | WhatsApp | Activo | Asignados | Disponibilidad
+    """
+    sheet = hoja_asesores()
+    asesores = sheet.get_all_records()
+
+    activos = []
+
+    for fila, asesor in enumerate(asesores, start=2):
+        activo = str(asesor.get("Activo", "")).strip().lower()
+
+        if activo == "si":
+            asignados = asesor.get("Asignados", 0) or 0
+
+            try:
+                asignados = int(asignados)
+            except ValueError:
+                asignados = 0
+
+            activos.append({
+                "fila": fila,
+                "nombre": str(asesor.get("Nombres", "Asesor asignado")).strip(),
+                "correo": str(asesor.get("Correo", "")).strip(),
+                "whatsapp": str(asesor.get("WhatsApp", "")).strip(),
+                "asignados": asignados,
+            })
+
+    if not activos:
+        return {
+            "nombre": "Sin asesor disponible",
+            "correo": "",
+            "whatsapp": "",
+        }
+
+    seleccionado = sorted(activos, key=lambda a: a["asignados"])[0]
+    sheet.update_cell(seleccionado["fila"], 5, seleccionado["asignados"] + 1)
+
+    return seleccionado
+
+
+# ============================================================
+# WHATSAPP CLOUD API
+# ============================================================
+
 def enviar_payload(payload):
+    if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
+        print("ERROR: faltan WHATSAPP_TOKEN o PHONE_NUMBER_ID.")
+        return
+
     url = f"https://graph.facebook.com/v23.0/{PHONE_NUMBER_ID}/messages"
+
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload, timeout=20)
     print("RESPUESTA WHATSAPP:", response.status_code, response.text)
 
 
@@ -136,12 +221,13 @@ def enviar_texto(telefono, mensaje):
         "messaging_product": "whatsapp",
         "to": telefono,
         "type": "text",
-        "text": {"body": mensaje}
+        "text": {"body": mensaje},
     }
+
     enviar_payload(payload)
 
 
-def enviar_privacidad(telefono):
+def enviar_botones_privacidad(telefono):
     payload = {
         "messaging_product": "whatsapp",
         "to": telefono,
@@ -159,16 +245,33 @@ def enviar_privacidad(telefono):
             },
             "action": {
                 "buttons": [
-                    {"type": "reply", "reply": {"id": "acepto_privacidad", "title": "✅ Sí"}},
-                    {"type": "reply", "reply": {"id": "no_acepto_privacidad", "title": "❌ No"}}
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "acepto_privacidad",
+                            "title": "✅ Sí",
+                        },
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "no_acepto_privacidad",
+                            "title": "❌ No",
+                        },
+                    },
                 ]
-            }
-        }
+            },
+        },
     }
+
     enviar_payload(payload)
 
 
-def mensaje_solicitud_datos():
+# ============================================================
+# MENSAJES DEL BOT
+# ============================================================
+
+def mensaje_solicitud_datos_representante():
     return (
         "✅ ¡Gracias por confirmar!\n\n"
         "Para continuar con el proceso de admisión, envíe en un solo mensaje la siguiente información:\n\n"
@@ -195,21 +298,21 @@ def mensaje_otro_hijo():
     return (
         "¿Tiene otro hijo/a interesado/a en el proceso de admisión?\n\n"
         "1️⃣ Sí, registrar otro nivel de estudio\n"
-        "2️⃣ No, continuar al menú de consultas\n\n"
+        "2️⃣ No, continuar al menú principal\n\n"
         "✍️ Escriba 1 o 2."
     )
 
 
-def mensaje_menu():
+def mensaje_menu_principal():
     return (
-        "📚 ¿Qué información desea consultar?\n\n"
+        "📚 *Menú principal*\n\n"
         "1️⃣ 📋 Proceso de admisión\n"
         "2️⃣ 💰 Precios\n"
         "3️⃣ ⚽ Actividades extracurriculares\n"
         "4️⃣ 🎁 Descuento disponible\n"
-        "5️⃣ 📝 Inscripciones (QR)\n"
+        "5️⃣ 📝 Inscripción QR\n"
         "6️⃣ 👩‍💼 Consulta con un asesor\n"
-        "7️⃣ ✅ Finalizar consulta\n\n"
+        "7️⃣ ✅ Finalizar\n\n"
         "✍️ Escriba únicamente el número de la opción que desea consultar."
     )
 
@@ -221,17 +324,51 @@ def mensaje_final():
     )
 
 
-def extraer_mensaje(value):
-    msg = value["messages"][0]
+def mensaje_error_datos_representante():
+    return (
+        "No logramos registrar la información.\n\n"
+        "Por favor envíe los datos en este orden:\n\n"
+        "👤 Nombre del representante\n"
+        "📧 Correo electrónico\n"
+        "📱 Teléfono de contacto\n\n"
+        "Ejemplo:\n"
+        "María Pérez\n"
+        "correo@ejemplo.com\n"
+        "0999999999"
+    )
 
-    if msg["type"] == "text":
+
+def mensaje_volver_menu():
+    return (
+        "\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "¿Desea realizar otra consulta?\n\n"
+        f"{mensaje_menu_principal()}"
+    )
+
+
+# ============================================================
+# VALIDACIONES Y UTILIDADES
+# ============================================================
+
+def normalizar_texto(texto):
+    return str(texto or "").strip().lower()
+
+
+def extraer_mensaje_entrante(value):
+    msg = value["messages"][0]
+    tipo = msg.get("type")
+
+    if tipo == "text":
         return msg["text"]["body"].strip()
 
-    if msg["type"] == "interactive":
-        interactive = msg["interactive"]
+    if tipo == "interactive":
+        interactive = msg.get("interactive", {})
 
-        if interactive["type"] == "button_reply":
+        if interactive.get("type") == "button_reply":
             return interactive["button_reply"]["id"]
+
+        if interactive.get("type") == "list_reply":
+            return interactive["list_reply"]["id"]
 
     return ""
 
@@ -242,41 +379,79 @@ def extraer_datos_representante(mensaje):
     if len(lineas) < 3:
         return None
 
+    representante = lineas[0]
+    correo = lineas[1]
+    telefono_contacto = lineas[2]
+
+    if "@" not in correo or "." not in correo:
+        return None
+
+    if len(re.sub(r"\D", "", telefono_contacto)) < 7:
+        return None
+
     return {
-        "representante": lineas[0],
-        "correo": lineas[1],
-        "telefono_contacto": lineas[2]
+        "representante": representante,
+        "correo": correo,
+        "telefono_contacto": telefono_contacto,
     }
 
 
-def registrar_nivel(telefono, nivel_codigo):
-    nivel = NIVELES.get(nivel_codigo)
+def obtener_nivel_por_codigo(codigo):
+    codigo_limpio = str(codigo or "").strip()
+    return NIVELES.get(codigo_limpio)
+
+
+def convertir_numero_ecuador(numero):
+    """
+    Convierte 0999999999 a 593999999999.
+    Si ya viene con 593, lo deja igual.
+    """
+    limpio = re.sub(r"\D", "", str(numero or ""))
+
+    if limpio.startswith("593"):
+        return limpio
+
+    if limpio.startswith("0"):
+        return "593" + limpio[1:]
+
+    return limpio
+
+
+def registrar_nivel_para_usuario(telefono, nivel_codigo):
+    nivel = obtener_nivel_por_codigo(nivel_codigo)
 
     if not nivel:
         return None
 
     estado = USER_STATE.get(telefono, {})
 
-    codigo = guardar_en_sheets(
-        estado.get("telefono_contacto", telefono),
-        estado.get("representante", ""),
-        nivel,
-        estado.get("correo", ""),
-        estado.get("asesor", "")
+    codigo = guardar_lead(
+        telefono_contacto=estado.get("telefono_contacto", telefono),
+        representante=estado.get("representante", ""),
+        nivel=nivel,
+        correo=estado.get("correo", ""),
+        asesor=estado.get("asesor", ""),
     )
 
+    estado.setdefault("codigos", [])
     estado["codigos"].append(codigo)
     estado["ultimo_codigo"] = codigo
     estado["ultimo_nivel"] = nivel
 
     return {
         "codigo": codigo,
-        "nivel": nivel
+        "nivel": nivel,
     }
 
 
-def responder_opcion_menu(telefono, opcion):
+# ============================================================
+# RESPUESTAS DEL MENÚ PRINCIPAL
+# ============================================================
+
+def responder_menu(telefono, opcion):
+    opcion = str(opcion or "").strip()
     estado = USER_STATE.get(telefono, {})
+
     asesor = estado.get("asesor", "Asesor asignado")
     asesor_whatsapp = estado.get("asesor_whatsapp", "")
     codigo = estado.get("ultimo_codigo", "")
@@ -317,7 +492,7 @@ def responder_opcion_menu(telefono, opcion):
     elif opcion == "5":
         enviar_texto(
             telefono,
-            "📝 *Inscripciones (QR)*\n\n"
+            "📝 *Inscripción QR*\n\n"
             "El área de admisiones le proporcionará el enlace o QR oficial para continuar con el proceso de inscripción."
         )
 
@@ -329,10 +504,7 @@ def responder_opcion_menu(telefono, opcion):
         )
 
         if asesor_whatsapp:
-            numero = asesor_whatsapp.replace(" ", "")
-            if numero.startswith("0"):
-                numero = "593" + numero[1:]
-
+            numero = convertir_numero_ecuador(asesor_whatsapp)
             mensaje += (
                 "Puede contactar directamente a su asesor en el siguiente enlace:\n"
                 f"https://wa.me/{numero}?text=Hola,%20deseo%20información%20sobre%20mi%20proceso%20de%20admisión.%20Mi%20código%20es%20{codigo}"
@@ -350,13 +522,119 @@ def responder_opcion_menu(telefono, opcion):
     else:
         enviar_texto(telefono, "Por favor seleccione una opción válida del 1 al 7.")
 
+    enviar_texto(telefono, mensaje_volver_menu())
+
+
+# ============================================================
+# MANEJADORES DE ESTADO
+# ============================================================
+
+def iniciar_flujo(telefono):
+    USER_STATE[telefono] = {"estado": "inicio"}
+    enviar_botones_privacidad(telefono)
+
+
+def aceptar_privacidad(telefono):
+    USER_STATE[telefono] = {"estado": "esperando_datos_representante"}
+    enviar_texto(telefono, mensaje_solicitud_datos_representante())
+
+
+def rechazar_privacidad(telefono):
+    USER_STATE[telefono] = {"estado": "finalizado"}
     enviar_texto(
         telefono,
-        "\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "¿Desea realizar otra consulta?\n\n"
-        + mensaje_menu()
+        "Gracias por contactarnos.\n\n"
+        "No podremos recopilar ni procesar información personal sin su consentimiento."
     )
 
+
+def manejar_datos_representante(telefono, mensaje_original):
+    datos = extraer_datos_representante(mensaje_original)
+
+    if not datos:
+        enviar_texto(telefono, mensaje_error_datos_representante())
+        return
+
+    asesor = obtener_asesor()
+
+    USER_STATE[telefono] = {
+        "estado": "esperando_nivel_hijo",
+        "representante": datos["representante"],
+        "correo": datos["correo"],
+        "telefono_contacto": datos["telefono_contacto"],
+        "asesor": asesor["nombre"],
+        "asesor_correo": asesor.get("correo", ""),
+        "asesor_whatsapp": asesor.get("whatsapp", ""),
+        "codigos": [],
+        "ultimo_codigo": "",
+        "ultimo_nivel": "",
+    }
+
+    enviar_texto(
+        telefono,
+        "✅ Datos del representante registrados correctamente."
+    )
+
+    enviar_texto(telefono, mensaje_pedir_nivel())
+
+
+def manejar_nivel_hijo(telefono, mensaje_original):
+    resultado = registrar_nivel_para_usuario(telefono, mensaje_original.strip())
+
+    if not resultado:
+        enviar_texto(telefono, "Por favor escriba un número válido del 1 al 15.")
+        enviar_texto(telefono, mensaje_pedir_nivel())
+        return
+
+    enviar_texto(
+        telefono,
+        "✅ Nivel registrado correctamente.\n\n"
+        f"🎓 Nivel: *{resultado['nivel']}*\n"
+        f"📋 Código: *{resultado['codigo']}*"
+    )
+
+    USER_STATE[telefono]["estado"] = "preguntar_otro_hijo"
+    enviar_texto(telefono, mensaje_otro_hijo())
+
+
+def manejar_otro_hijo(telefono, mensaje):
+    if mensaje == "1":
+        USER_STATE[telefono]["estado"] = "esperando_nivel_hijo"
+        enviar_texto(telefono, mensaje_pedir_nivel())
+        return
+
+    if mensaje == "2":
+        USER_STATE[telefono]["estado"] = "menu_principal"
+
+        estado = USER_STATE.get(telefono, {})
+        codigos = estado.get("codigos", [])
+        codigos_texto = "\n".join([f"• {c}" for c in codigos]) or "No disponible"
+
+        enviar_texto(
+            telefono,
+            "✅ Registro completado correctamente.\n\n"
+            f"👩‍💼 Asesor asignado:\n*{estado.get('asesor', '')}*\n\n"
+            f"📋 Códigos generados:\n{codigos_texto}"
+        )
+
+        enviar_texto(telefono, mensaje_menu_principal())
+        return
+
+    enviar_texto(telefono, mensaje_otro_hijo())
+
+
+def manejar_menu_principal(telefono, mensaje):
+    if mensaje not in MENU_OPCIONES_VALIDAS:
+        enviar_texto(telefono, "Por favor seleccione una opción válida del 1 al 7.")
+        enviar_texto(telefono, mensaje_menu_principal())
+        return
+
+    responder_menu(telefono, mensaje)
+
+
+# ============================================================
+# FLASK ROUTES
+# ============================================================
 
 @app.route("/")
 def home():
@@ -387,119 +665,47 @@ def webhook():
             return "OK", 200
 
         telefono = value["messages"][0]["from"]
-        mensaje_original = extraer_mensaje(value)
-        mensaje = mensaje_original.lower().strip()
+        mensaje_original = extraer_mensaje_entrante(value)
+        mensaje = normalizar_texto(mensaje_original)
 
         print("TELÉFONO:", telefono)
         print("MENSAJE:", mensaje_original)
 
+        # Reinicio o inicio
         if mensaje in ["hola", "inicio", "menu", "menú", "reiniciar", "reset"]:
-            USER_STATE[telefono] = {"estado": "inicio"}
-            enviar_privacidad(telefono)
+            iniciar_flujo(telefono)
             return "OK", 200
 
+        # Privacidad
         if mensaje in ["acepto_privacidad", "a", "si", "sí", "acepto"]:
-            USER_STATE[telefono] = {"estado": "esperando_datos_representante"}
-            enviar_texto(telefono, mensaje_solicitud_datos())
+            aceptar_privacidad(telefono)
             return "OK", 200
 
         if mensaje in ["no_acepto_privacidad", "b", "no", "no acepto"]:
-            USER_STATE[telefono] = {"estado": "finalizado"}
-            enviar_texto(
-                telefono,
-                "Gracias por contactarnos.\n\n"
-                "No podremos recopilar ni procesar información personal sin su consentimiento."
-            )
+            rechazar_privacidad(telefono)
             return "OK", 200
 
+        # Estados
         estado_actual = USER_STATE.get(telefono, {}).get("estado")
 
         if estado_actual == "esperando_datos_representante":
-            datos = extraer_datos_representante(mensaje_original)
-
-            if not datos:
-                enviar_texto(
-                    telefono,
-                    "No logramos registrar la información.\n\n"
-                    "Por favor envíe los datos en este orden:\n\n"
-                    "👤 Nombre del representante\n"
-                    "📧 Correo electrónico\n"
-                    "📱 Teléfono de contacto\n\n"
-                    "Ejemplo:\n"
-                    "María Pérez\n"
-                    "correo@ejemplo.com\n"
-                    "0999999999"
-                )
-                return "OK", 200
-
-            asesor, asesor_whatsapp = obtener_asesor()
-
-            USER_STATE[telefono] = {
-                "estado": "esperando_nivel_hijo",
-                "representante": datos["representante"],
-                "correo": datos["correo"],
-                "telefono_contacto": datos["telefono_contacto"],
-                "asesor": asesor,
-                "asesor_whatsapp": asesor_whatsapp,
-                "codigos": [],
-                "ultimo_codigo": "",
-                "ultimo_nivel": ""
-            }
-
-            enviar_texto(
-                telefono,
-                "✅ Datos del representante registrados correctamente."
-            )
-
-            enviar_texto(telefono, mensaje_pedir_nivel())
+            manejar_datos_representante(telefono, mensaje_original)
             return "OK", 200
 
         if estado_actual == "esperando_nivel_hijo":
-            resultado = registrar_nivel(telefono, mensaje_original.strip())
-
-            if not resultado:
-                enviar_texto(telefono, "Por favor escriba un número válido del 1 al 15.")
-                enviar_texto(telefono, mensaje_pedir_nivel())
-                return "OK", 200
-
-            enviar_texto(
-                telefono,
-                "✅ Nivel registrado correctamente.\n\n"
-                f"🎓 Nivel: *{resultado['nivel']}*\n"
-                f"📋 Código: *{resultado['codigo']}*"
-            )
-
-            USER_STATE[telefono]["estado"] = "preguntar_otro_hijo"
-            enviar_texto(telefono, mensaje_otro_hijo())
+            manejar_nivel_hijo(telefono, mensaje_original)
             return "OK", 200
 
         if estado_actual == "preguntar_otro_hijo":
-            if mensaje == "1":
-                USER_STATE[telefono]["estado"] = "esperando_nivel_hijo"
-                enviar_texto(telefono, mensaje_pedir_nivel())
-                return "OK", 200
-
-            if mensaje == "2":
-                USER_STATE[telefono]["estado"] = "menu_consultas"
-
-                estado = USER_STATE.get(telefono, {})
-                codigos_texto = "\n".join([f"• {c}" for c in estado.get("codigos", [])])
-
-                enviar_texto(
-                    telefono,
-                    "✅ Registro completado correctamente.\n\n"
-                    f"👩‍💼 Asesor asignado:\n*{estado.get('asesor', '')}*\n\n"
-                    f"📋 Códigos generados:\n{codigos_texto}"
-                )
-
-                enviar_texto(telefono, mensaje_menu())
-                return "OK", 200
-
-            enviar_texto(telefono, mensaje_otro_hijo())
+            manejar_otro_hijo(telefono, mensaje)
             return "OK", 200
 
-        if estado_actual == "menu_consultas":
-            responder_opcion_menu(telefono, mensaje)
+        if estado_actual == "menu_principal":
+            manejar_menu_principal(telefono, mensaje)
+            return "OK", 200
+
+        if estado_actual == "finalizado":
+            enviar_texto(telefono, "Para iniciar una nueva consulta, escriba: *Hola*")
             return "OK", 200
 
         enviar_texto(telefono, "Para iniciar el proceso de admisiones, escriba: *Hola*")
